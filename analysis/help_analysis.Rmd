@@ -165,6 +165,8 @@ only_good_moves %>% group_by(goal_type) %>%
 e3a_design = only_good_moves %>% filter(useful >=5) %>%
   group_by(goal_type) %>%
   sample_n(3, replace = FALSE)
+
+write.csv(e3a_design, file = "../data/e2/e3a_design.csv", row.names = FALSE)
   
 ```
 # MODELS (TBD)
