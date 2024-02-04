@@ -1,0 +1,253 @@
+---
+title: "cogsci-2023"
+output: html_document
+date: "2023-01-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggthemes)
+library(lme4)
+```
+
+
+# analyzing e2
+
+```{r}
+
+m = read_csv("../data/e2/final_tracker.csv")%>% distinct() %>%
+  rename(min_moves = optimal_moves) %>%
+  mutate(move_type = ifelse(move_utility == -1, "harmful", 
+                                    ifelse(move_utility == 1, "useful", 
+                                           ifelse(move == "pass", "pass", "inconsequential"))))
+
+## total number of moves 
+
+total_moves = m %>% group_by(ID, goal, min_moves) %>% 
+  summarise(count = n()) 
+
+
+id_percent = m %>% 
+  group_by(anonID, goal_type, move_type) %>%
+  summarise(count = n()) %>%
+  group_by(anonID, move_type) %>%
+  summarise(ci = list(mean_cl_boot(count) %>% 
+                        rename(mean=y, lwr=ymin, upr=ymax))) %>% unnest%>%
+  mutate(percent = round(mean / sum(mean), 3),
+         per_lower = round(lwr / sum(lwr), 3),
+         per_upr = round(upr / sum(upr), 3))%>%
+  rename(`move type` = "move_type")
+
+```
+
+### architect
+```{r}
+m %>% 
+  group_by(anonID, goal_type, move_type) %>%
+  summarise(count = n()) %>%
+  group_by(move_type) %>%
+  summarise(ci = list(mean_cl_boot(count) %>% 
+                        rename(mean=y, lwr=ymin, upr=ymax))) %>% unnest%>%
+  mutate(percent = round(mean / sum(mean), 3),
+         per_lower = round(lwr / sum(lwr), 3),
+         per_upr = round(upr / sum(upr), 3))%>%
+  rename(`move type` = "move_type")%>%
+  ggplot(aes(x= `move type`, y = percent, group = `move type`, fill =`move type`)) +
+geom_bar(stat = "identity", position = "dodge", width = 0.7, color = "gray24")+
+  geom_point(data = id_percent, aes(x = `move type`, y = percent, 
+                                    group = `move type`, fill =`move type`),
+             shape = 21, position = position_jitterdodge(jitter.width = 0.1),
+             alpha = 0.3)+
+  geom_errorbar(aes(ymin=per_lower, ymax=per_upr), size = 0.5, width=.15, 
+                color = "black", position = position_dodge(0.70))+
+  labs(y = "proportion of moves", title = "principal moves")+
+  theme_clean()+
+  scale_fill_manual(values = c("darksalmon", "darkslategray4","darkolivegreen4"))+
+  theme(plot.background = element_rect(
+    color = "white"),
+    strip.text.x = element_text(size =rel(2)),
+        axis.text = element_text(size =rel(1.5)),
+        axis.title = element_text(size =rel(2)),
+        plot.title = element_text(hjust = .5, size = rel(1.5)),
+        legend.position = "none")
+
+## model 
+library(lme4)
+library(lmerTest)
+
+a_data_overall = m %>% 
+  group_by(ID, move_type) %>%
+  summarise(count = n())
+
+  
+architect_moves_model = lm(data = a_data_overall, 
+                                   count ~ move_type)
+summary(architect_moves_model)
+car::Anova(architect_moves_model)
+```
+
+## first move analysis
+
+### plot
+
+```{r}
+first_move = read_csv("../data/e2/first_moves.csv") %>%
+  separate(goal, into = c("goal_type", "n", "m"))%>%
+  mutate(goal_type = fct_relevel(goal_type, "move", "uncover", "cover", "fill", "clear"),
+         first_move_serves_goal = as.factor(first_move_serves_goal),
+         useful = ifelse(first_move_serves_goal == 1, 1, 0)) %>%
+  pivot_longer(names_to = "rank", cols=c(mean_random_samples_rank, first_move_rank))%>%
+  mutate(rank = fct_recode(rank, `random\nrank` = "mean_random_samples_rank", `empirical\nrank` = "first_move_rank"))
+
+#barplot
+
+useful_data = first_move %>%
+  filter(first_move_serves_goal == 1)%>%
+  group_by(anonID, rank)%>%
+  summarise(ci = list(mean_cl_boot(value) %>% 
+                        rename(mean=y, lwr=ymin, upr=ymax))) %>% unnest
+
+first_move %>%
+  filter(first_move_serves_goal == 1) %>%
+  group_by(goal_type,rank)%>%
+  summarise(ci = list(mean_cl_boot(value) %>% 
+                        rename(mean=y, lwr=ymin, upr=ymax))) %>% unnest%>%
+  ggplot(aes(x= rank, y = mean, group = rank, fill = rank)) +
+geom_bar(stat = "identity", position = "dodge", width = 0.7)+
+  geom_point(data =useful_data, aes(x = rank, y = mean, 
+                                    group = rank, fill = rank),
+             shape = 21, position = position_jitterdodge(jitter.width = 0.1),
+             alpha = 0.3, color = "black")+
+    geom_errorbar(aes(ymin=lwr, ymax=upr), size = 0.5, width=.15, 
+                color = "black", position = position_dodge(0.70))+
+  labs(y = "mean rank of first move", title = "useful first moves", x = "")+
+  theme_clean()+
+  facet_wrap(~goal_type)+
+  scale_fill_tableau()+
+    theme(plot.background = element_rect(
+    color = "white"),
+    strip.text.x = element_text(size =rel(2)),
+        axis.text = element_text(size =rel(1.5)),
+        axis.title = element_text(size =rel(2)),
+        plot.title = element_text(hjust = .5, size = rel(1.5)),
+        legend.position = "none")
+```
+
+### model
+```{r}
+
+useful_data_model = first_move %>%
+  filter(first_move_serves_goal == 1)
+
+first_move_model = lmer(data = useful_data_model, value ~ rank + (1|anonID))
+summary(first_move_model)
+car::Anova(first_move_model)
+
+```
+
+
+## selecting e3a games
+
+```{r}
+# we only pick games where no harmful moves were made
+only_good_moves = m %>% group_by(anonID, ID, importId, goal, goal_type, min_moves, move_type) %>% count() %>%
+  pivot_wider(names_from = move_type, values_from = n) %>%
+  filter(is.na(harmful), is.na(inconsequential))
+
+## how many moves on avg per goal type
+
+only_good_moves %>% group_by(goal_type) %>% 
+  summarise(n_avg = mean(useful))
+
+## take a random sample of 9 games, 3 games of "move", "fill" and "cover"
+
+e3a_design = only_good_moves %>% filter(useful >=5) %>%
+  group_by(goal_type) %>%
+  sample_n(3, replace = FALSE)
+  
+```
+# MODELS (TBD)
+## input model data
+
+```{r}
+grid_dfs = paste0(getwd(),"/../data/e2/model_prag/")
+
+prob_dfs <-map_dfr(list.files(path = grid_dfs, pattern = "\\.csv$", full.names = TRUE), ~read_csv(.x))
+
+prob_dfs %>% group_by(literal_beta, pragmatic_beta) %>%
+  summarize(loglik = sum(log(prob), na.rm = T)) %>%
+  ungroup() %>%
+  filter(loglik == max(loglik))
+  
+  
+write.csv(speaker_dfs, file = paste0(getwd(),"/../data/exp3/model_output/all_speaker_dfs.csv"), row.names = FALSE)
+
+```
+
+## e2 data reformat
+
+```{r}
+e1 = read_csv("../data/e1/final_move_df.csv") %>% rename(importId = "ID") %>% 
+  select(importId, config) %>% distinct()
+
+invalidIDs = c("random-game", "asdfasdf", "TEST", "WILLIAM_TEST","random-id","TESTING","TESTGIN123","gbuck")
+
+
+rawe2 = rbind(readxl::read_excel("../data/e2/sona_20231218_gameData.xlsx") %>% mutate(source = "sona"),
+            readxl::read_excel("../data/e2/prolific_gameData.xlsx") %>% mutate(source = "prolific")) %>%
+  filter(!is.na(importId)) %>%
+  left_join(e1) %>%
+  filter(!playerId %in% invalidIDs)
+
+# num games per import ID
+
+importID_games = rawe2 %>% group_by(importId, playerId) %>% count() %>% group_by(importId) %>% count()
+
+incomplete_games = rawe2 %>% group_by(playerId, importId, goal) %>% count() %>% 
+  group_by(playerId, importId) %>% count() %>%
+  filter(n <10) %>% pull(playerId)
+ 
+  
+cleanede2 = rawe2 %>%
+  filter(!playerId %in% incomplete_games) %>%
+  select(playerId, importId, goal, config, combinedToAndFrom)%>%
+  group_by(playerId, importId, goal, config) %>%
+  summarize(moveIDs = paste0('[', paste(combinedToAndFrom, collapse = ','), ']')) %>%
+  ungroup() %>%
+  rename(ID = "playerId")
+
+
+unique_ids <- unique(cleanede2$ID)
+random_keys <- replicate(length(unique_ids), paste0(sample(c(0:9, letters, LETTERS), 10, replace = TRUE), collapse = ""))
+
+# Create a named vector to map IDs to random keys
+id_key_mapping <- set_names(random_keys, unique_ids)
+
+# Replace the ID column with the corresponding random key
+cleanede2 <- cleanede2 %>%
+  mutate(anonID = id_key_mapping[ID])
+  
+
+
+write.csv(cleanede2, file = "../data/e2/cleaned_e2.csv", row.names = FALSE)
+
+subfolder_path <- "../data/e2/all_IDs/"  # Replace with your desired path
+
+unique_combos <- unique(paste(cleanede2$anonID, cleanede2$importId, sep = "_"))
+
+# Loop through unique combinations and write to CSV
+for (combo in unique_combos) {
+  subfolder <- file.path(subfolder_path, combo)
+  dir.create(subfolder, recursive = TRUE, showWarnings = FALSE)
+  
+  filter_data <- cleanede2[cleanede2$anonID == strsplit(combo, "_")[[1]][1] &
+                                cleanede2$importId == as.numeric(strsplit(combo, "_")[[1]][2]), ]
+  
+  write.csv(filter_data, file.path(subfolder, "final_move_df.csv"), row.names = FALSE)
+}
+
+```
+
+
+
