@@ -23,5 +23,5 @@ importIds_e2_distribution = importIds_e2_distribution[importIds_e2_distribution 
 print(len(importIds_e2_distribution)) 
 """
 32 ImportIDs used twice, 26 used 3 times: Total 58 ImportIDs used more than twice
-Meaning 3 ImportIDs are used only once.
+Meaning 3 ImportIDs are used only once. There other 31 are never used. 
 """
