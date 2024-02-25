@@ -22,9 +22,28 @@ m = read_csv("../data/e2/final_tracker.csv")%>% distinct() %>%
                                     ifelse(move_utility == 1, "useful", 
                                            ifelse(move == "pass", "pass", "inconsequential"))))
 
+
+
+anonIDs_all = read_csv("../data/e2/all_participants_e2.csv")%>%
+  separate(anonID_importId, into = c("anonID", "importId"), sep = "_")%>%
+  rename(playerId = "ID") %>% mutate(importId = as.character(importId))
+
+validIDs_df = read_csv("../data/e2/final_e2_participants.csv") %>%
+  mutate(importId = as.character(importId))%>%
+  left_join(anonIDs_all)%>%
+  unite("anonID_importId", c(anonID,importId), sep = "_")
+  
+validIDs = validIDs_df %>% pull(anonID_importId)
+
+## make exclusions
+
+m = m %>% unite("anonID_importId", c(anonID,importId), sep = "_") %>%
+  filter(anonID_importId %in% validIDs) %>%
+  separate(anonID_importId, into = c("anonID", "importId"), sep = "_")
+
 ## total number of moves 
 
-total_moves = m %>% group_by(ID, goal, min_moves) %>% 
+total_moves = m %>% group_by(anonID, goal, min_moves) %>% 
   summarise(count = n()) 
 
 
@@ -151,7 +170,9 @@ car::Anova(first_move_model)
 
 ```{r}
 # we only pick games where no harmful moves were made
-only_good_moves = m %>% group_by(anonID, ID, importId, goal, goal_type, min_moves, move_type) %>% count() %>%
+# and IDs must be in the final games to be use
+only_good_moves = m %>% 
+  group_by(anonID, importId, goal, goal_type, min_moves, move_type) %>% count() %>%
   pivot_wider(names_from = move_type, values_from = n) %>%
   filter(is.na(harmful), is.na(inconsequential))
 
@@ -162,11 +183,50 @@ only_good_moves %>% group_by(goal_type) %>%
 
 ## take a random sample of 9 games, 3 games of "move", "fill" and "cover"
 
-e3a_design = only_good_moves %>% filter(useful >=5) %>%
-  group_by(goal_type) %>%
-  sample_n(3, replace = FALSE)
+## COVER (each color is represented)
+cover_goals = only_good_moves %>% 
+  filter(goal %in% c("cover red all", "cover blue all", "cover green all")) %>%
+  filter(useful >=5) %>%
+  group_by(goal) %>%
+  sample_n(1, replace = FALSE)
 
-write.csv(e3a_design, file = "../data/e2/e3a_design.csv", row.names = FALSE)
+## FILL (different locations are represented )
+
+fill_goals = only_good_moves %>%
+  filter(goal_type %in% "fill")%>%
+  separate(goal, into = c("type", "color", "location"))%>%
+  filter(useful >=5) %>%
+  group_by(location) %>%
+  sample_n(1, replace = FALSE) %>%
+  ungroup() %>%
+  sample_n(3, replace = FALSE)%>%
+  unite("goal", c(type,color, location), sep = " ")
+  
+
+## MOVE (each color is represented)
+
+move_goals = only_good_moves %>%
+  filter(goal_type %in% "move")%>%
+  separate(goal, into = c("type", "color", "location"))%>%
+  filter(useful >=5) %>%
+  group_by(color) %>%
+  sample_n(1, replace = FALSE)%>%
+  unite("goal", c(type,color, location), sep = " ")
+
+e3a_design = rbind(cover_goals, move_goals, fill_goals) %>%
+  unite("anonID_importId", c(anonID,importId), sep = "_")
+
+length(unique(e3a_design$anonID_importId))
+
+e3a_IDs = e3a_design %>%pull(anonID_importId)
+e3a_match = e3a_design %>% unite("games", c(anonID_importId,goal), sep = "_")
+
+e3a_data = m %>% unite("games", c(anonID,importId, goal), sep = "_") %>%
+  filter(games %in% e3a_match$games) %>%
+  separate(games, into = c("anonID", "importId", "goal"), sep = "_")%>%
+  left_join(validIDs_df %>% separate(anonID_importId, into = c("anonID", "importId")))
+
+write.csv(e3a_data, file = "../data/e2/e3a_data.csv", row.names = FALSE)
   
 ```
 # MODELS (TBD)
