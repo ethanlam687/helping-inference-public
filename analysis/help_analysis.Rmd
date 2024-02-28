@@ -227,8 +227,21 @@ e3a_data = m %>% unite("games", c(anonID,importId, goal), sep = "_") %>%
   left_join(validIDs_df %>% separate(anonID_importId, into = c("anonID", "importId")))
 
 write.csv(e3a_data, file = "../data/e2/e3a_data.csv", row.names = FALSE)
+
+
+e3data = read_csv("../data/e2/e3a_data.csv")
+
+widee3a = e3data %>%
+  select(anonID, importId, gameId, goal,goal_type, move) %>%
+  group_by(anonID, importId, goal, goal_type) %>%
+  summarise(moveIDs = paste("[", paste(move, collapse = ','), "]", collapse = ''))
+
+write.csv(widee3a, file = "../data/e2/e3a_data_wide.csv", row.names = FALSE)
+
   
 ```
+
+
 # MODELS (TBD)
 ## input model data
 
