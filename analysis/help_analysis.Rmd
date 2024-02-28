@@ -229,15 +229,16 @@ e3a_data = m %>% unite("games", c(anonID,importId, goal), sep = "_") %>%
 write.csv(e3a_data, file = "../data/e2/e3a_data.csv", row.names = FALSE)
 
 
-e3data = read_csv("../data/e2/e3a_data.csv")
 
-widee3a = e3data %>%
-  select(anonID, importId, gameId, goal,goal_type, move) %>%
-  group_by(anonID, importId, goal, goal_type) %>%
-  summarise(moveIDs = paste("[", paste(move, collapse = ','), "]", collapse = ''))
 
-write.csv(widee3a, file = "../data/e2/e3a_data_wide.csv", row.names = FALSE)
+e2_final_move_df = read_csv("../data/e2/cleaned_e2.csv") %>%
+  rename(playerId = ID)
 
+e3data = read_csv("../data/e2/e3a_data.csv") %>% 
+  select(anonID, importId, goal, playerId,gameId) %>% distinct() %>%
+  left_join(e2_final_move_df)
+
+write.csv(e3data, file = "../data/e2/e3a_data_wide.csv", row.names = FALSE)
   
 ```
 
