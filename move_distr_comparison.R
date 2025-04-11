@@ -27,6 +27,7 @@ combined <- combined %>%
     )
   )
 
+# total number of different move types
 move_summary <- combined %>%
   group_by(experiment, move_utility) %>%
   summarise(count = n(), .groups = 'drop') %>%
@@ -42,16 +43,16 @@ print(move_summary)
 
 
 # average number of moves per participant, grouped by move type
-avg_moves_by_player <- combined %>%
-  group_by(experiment, ID, anonID, move_type) %>%
+avg_moves_by_player_per_game <- combined %>%
+  group_by(experiment, ID, anonID, goal_type, move_type) %>%
   summarise(count = n(), .groups = 'drop') %>%
   pivot_wider(names_from = move_type, values_from = count, values_fill = 0) %>%
   mutate(total_moves = Useful + Inconsequential + Harmful)
 
-view(avg_moves_by_player)
+view(avg_moves_by_player_per_game)
 
 # summary statistics: mean and SD of total moves by move type per player
-avg_moves_summary <- avg_moves_by_player %>%
+avg_moves_summary <- avg_moves_by_player_per_game %>%
   group_by(experiment) %>%
   summarise(
     mean_Useful = mean(Useful),
@@ -63,7 +64,7 @@ avg_moves_summary <- avg_moves_by_player %>%
     mean_total_moves = mean(total_moves),
     sd_total_moves = sd(total_moves)
   )
-
+print(avg_moves_summary)
 
 #create a bar plot to visualize avg_moves_summary
 ggplot(avg_moves_summary, aes(x = experiment)) +
