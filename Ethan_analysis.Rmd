@@ -1,0 +1,162 @@
+---
+title: "E1 and E2 Data Analysis"
+output: html_notebook
+---
+
+# Comparison of the move distributions between E1 and E2
+
+```{r}
+library(tidyverse)
+
+e1 <- read_csv("data/e1/final_tracker.csv")
+e2 <- read_csv("data/e2/final_tracker.csv")
+
+e1_architects <- e1 %>%
+  filter(role == "architect") %>%
+  mutate(experiment = "E1")
+
+e2 <- e2 %>%
+  mutate(experiment = "E2")
+
+combined <- bind_rows(e1_architects, e2)
+
+combined <- combined %>%
+  mutate(
+    move_utility = case_when(
+      move_utility == 1 ~ "useful",
+      move_utility == 0 ~ "inconsequential",
+      move_utility == -1 ~ "harmful"
+    ),
+    move_type = case_when(
+      move_utility == "useful" ~ "Useful",
+      move_utility == "inconsequential" ~ "Inconsequential",
+      move_utility == "harmful" ~ "Harmful"
+    )
+  )
+
+# total number of different move types
+move_summary <- combined %>%
+  group_by(experiment, move_utility, goal_type) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  pivot_wider(names_from = move_utility, values_from = count, values_fill = 0) %>%
+  rename(
+    harmful = `harmful`,
+    inconsequential = `inconsequential`,
+    useful = `useful`
+  ) %>%
+  mutate(total_moves = harmful + inconsequential + useful)
+
+# average distribution of moves per participant, grouped by goal type and experiment
+avg_moves_by_goal <- combined %>%
+  group_by(experiment, ID, anonID, goal_type, move_type) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  pivot_wider(names_from = move_type, values_from = count, values_fill = 0) %>%
+  mutate(total_moves = Useful + Inconsequential + Harmful)
+
+
+
+# summary statistics: mean and SD of move types across goal types and experiments
+avg_moves_summary <- avg_moves_by_goal %>%
+  group_by(goal_type, experiment) %>%
+  summarise(
+    mean_Useful = mean(Useful),
+    sd_Useful = sd(Useful),
+    mean_Inconsequential = mean(Inconsequential),
+    sd_Inconsequential = sd(Inconsequential),
+    mean_Harmful = mean(Harmful),
+    sd_Harmful = sd(Harmful),
+    mean_total_moves = mean(total_moves),
+    sd_total_moves = sd(total_moves)
+  )
+head(avg_moves_summary)
+
+```
+
+##### Visualization of move distributions
+
+```{r}
+# useful moves visualization
+ggplot(avg_moves_summary, aes(x = goal_type, y = mean_Useful, fill = experiment)) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.7) + 
+  geom_errorbar(aes(ymin = mean_Useful - sd_Useful, ymax = mean_Useful + sd_Useful),
+  position = position_dodge(width = 0.9),
+  width = 0.2) +
+  labs(title = "Players' Avg Number of Useful Moves Per Goal Type by Experiment",
+       x = "Goal Type", y = "Average Useful Moves Per Player", fill = "Experiment" ) +
+  theme_minimal()
+
+ggplot(avg_moves_summary, aes(x = goal_type, y = mean_Harmful, fill = experiment)) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.7) +
+  geom_errorbar(aes(ymin = mean_Harmful - sd_Harmful, ymax = mean_Harmful + sd_Harmful),
+  position = position_dodge(width = 0.9),
+  width = 0.2) +
+  labs(title = "Players' Avg Number of Harmful Moves Per Goal Type by Experiment",
+       x = "Goal Type", y = "Average Harmful Moves Per Player", fill = "Experiment") +
+  theme_minimal()
+
+ggplot(avg_moves_summary, aes(x = goal_type, y = mean_Inconsequential, fill = experiment)) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.7) +
+  geom_errorbar(aes(ymin = mean_Inconsequential - sd_Inconsequential, ymax = mean_Inconsequential + sd_Inconsequential),
+  position = position_dodge(width = 0.9),
+  width = 0.2) +
+  labs(title = "Players' Avg Number of Inconsequential Moves Per Goal Type by Experiment",
+       x = "Goal Type", y = "Average Inconsequential Moves Per Player", fill = "Experiment") +
+  theme_minimal()
+```
+
+##### Statistical Tests Comparing Move Types Across Experiments
+
+E2 players made significantly more useful moves than E1 players across all goal-types. 
+
+For the "move" goal type, E2 players also made significantly more inconsequential moves than E1 players. 
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(broom)
+
+ttest_all <- long_tbl %>%
+  # group and nested data by goal_type & move_type
+  
+  group_by(goal_type, move_type) %>%
+  nest() %>%
+
+  # run t-test on each nested chunk
+  mutate(
+    ttest_obj = map(data, ~ t.test(count ~ experiment, data = .x, var.equal = TRUE)),
+    tidied    = map(ttest_obj, tidy)
+  ) %>%
+  
+  unnest(tidied) %>%
+  
+  transmute(
+    goal_type,
+    move_type,
+    mean_E1 = estimate1,
+    mean_E2 = estimate2,
+    t_value = statistic,
+    p.value,
+    signficant = p.value < 0.05
+  )
+
+print(ttest_all)
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
