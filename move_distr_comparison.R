@@ -11,7 +11,6 @@ e2 <- e2 %>%
   mutate(experiment = "E2")
 
 combined <- bind_rows(e1_architects, e2)
-#view(combined)
 
 combined <- combined %>%
   mutate(
@@ -66,7 +65,7 @@ avg_moves_summary <- avg_moves_by_player_per_game %>%
   )
 print(avg_moves_summary)
 
-#create a bar plot to visualize avg_moves_summary
+
 ggplot(avg_moves_summary, aes(x = experiment)) +
   geom_bar(aes(y = mean_Useful), stat = "identity", fill = "blue", alpha = 0.5) +
   geom_errorbar(aes(ymin = mean_Useful - sd_Useful, ymax = mean_Useful + sd_Useful), width = 0.2) +

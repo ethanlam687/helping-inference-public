@@ -3,7 +3,7 @@ title: "E1 and E2 Data Analysis"
 output: html_notebook
 ---
 
-# Comparison of the move distributions between E1 and E2
+# Comparison of the move distributions between E1 and E2 and across Goal Types
 
 ```{r}
 library(tidyverse)
@@ -149,14 +149,3 @@ print(ttest_all)
 
 
 ```
-
-
-
-
-
-
-
-
-
-
-
