@@ -144,8 +144,114 @@ ttest_all <- long_tbl %>%
 print(ttest_all)
 
 
+```
 
 
+# Follow-up measure of pragmatism seen through Helper's move utility following rank of Architect's first move (pragmatism rank). 
+
+Found no significant correlation between architect first move rank and helper utility. 
+
+```{r}
+library(tidyverse)
+
+# select architects' first‐move rank
+arch <- read_csv("data/e1/final_first_moves.csv") %>%
+  rename(id = ID) %>%
+  select(id,goal, first_move_rank)
+
+# select helper's first move utility
+helpers <- read_csv("data/e1/final_tracker.csv") %>%
+  rename(id = ID) %>%
+  filter(role == "helper", move_id == 1) %>%
+  select(id, goal, helper_move = move, helper_utility = move_utility) %>%
+  mutate(
+    helper_action = if_else(helper_move == "pass", "pass", "move")
+  )
+
+# join architect ranks to helper utilities
+df_comb <- arch %>%
+  inner_join(helpers, by = c("id","goal"))
+
+# how often will helpers pass or move on their first move? 
+df_comb %>%
+  count(helper_action) %>%
+  mutate(prop = n / sum(n))
+
+# do more pragmatic arch moves reduce the chance of a pass?
+
+# create a arch_rank column based on the median of first_move_rank, splitting into high and low rank
+df_comb <- df_comb %>%
+  mutate(arch_rank = if_else(first_move_rank <= median(first_move_rank, na.rm = TRUE), "high_prag", "low_prag"))
+
+helper_pass_summary <- df_comb %>%
+# count how many helper_actions occurred in each arch_rank
+  count(arch_rank, helper_action) %>%
+  group_by(arch_rank) %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup()
+
+
+print(helper_pass_summary)
+
+
+
+# Spearman correlation between first_move_rank and helper_utility
+
+library(broom)
+library(dplyr)
+
+tidy(cor_result <- cor.test(df_comb$first_move_rank,
+                    df_comb$helper_utility,
+                    method = "spearman")) %>%
+  transmute(
+    rho = round(estimate, 2),
+    p_value = round(p.value, 3),
+  )
+
+
+
+# visualize data with scatterplot
+ggplot(df_comb, aes(x = first_move_rank, y = helper_utility)) +
+  geom_jitter(width = 0.2, height = 0.05, alpha = 0.6) +
+  geom_smooth(method = "loess", se = TRUE, color = "steelblue") +
+  labs(
+    title = "Helper Utility vs. Architect First Move Rank",
+    x = "Architect First Move Rank (lower = more pragmatic)",
+    y = "Helper Move Utility"
+  ) +
+  theme_minimal()
+
+# boxplot for group comparision
+df_comb <- df_comb %>%
+  mutate(
+    arch_rank = factor(
+      arch_rank,
+      levels = c("high_prag", "low_prag"),
+      labels = c("High Pragmatism", "Low Pragmatism")
+  )
+)
+ggplot(df_comb, aes(x = arch_rank, y = helper_utility, fill = arch_rank)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, height = 0.05, alpha = 0.5, color = "black", size = 0.8) +
+  scale_fill_brewer(palette = "Set2", guide = "none") +
+  labs(
+    title = "Helper Utility by Architect Pragmatism",
+    x = "Architect Pragmatism",
+    y = "Helper Move Utility"
+  ) +
+  theme_minimal()
+
+```
+
+# Extended to all moves
+
+```{r}
 
 
 ```
+
+
+
+
+
+
