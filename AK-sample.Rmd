@@ -1,0 +1,75 @@
+---
+title: "AKanalysis"
+output: html_document
+date: "2025-04-25"
+---
+# load packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lme4)
+library(emmeans)
+```
+
+# import data
+
+```{r}
+e1 <- read_csv("data/e1/final_tracker.csv")
+e2 <- read_csv("data/e2/final_tracker.csv")%>%
+  mutate(experiment = "E2")
+```
+
+
+# E1 vs E2 move analysis
+
+```{r}
+combined <- bind_rows(e1 %>%
+  filter(role == "architect") %>%
+  mutate(experiment = "E1"), e2)%>%
+  mutate(
+    move_type = case_when(
+      move_utility == 1 ~ "Useful",
+      move_utility == 0 ~ "Inconsequential",
+      move_utility == -1 ~ "Harmful"
+    ),
+  ID = ifelse(experiment == "E2", anonID, ID))
+```
+### model
+```{r}
+# COUNTING BY PROPORTION and Summary stats
+prop_moves <- combined %>%
+  count(experiment, ID, goal_type, move_type, name = "move_count") %>%
+  group_by(experiment, ID, goal_type) %>%
+  complete(move_type = c("Useful", "Harmful", "Inconsequential"), fill = list(move_count = 0)) %>%
+  mutate(total_moves = sum(move_count),
+         prop = move_count / total_moves) %>%
+  ungroup() %>%
+  mutate(across(c(experiment, goal_type, move_type, ID), as.factor)) %>%
+  select(-move_count, -total_moves)
+
+
+prop_model = lm(data = prop_moves, prop ~ experiment*move_type*goal_type)
+car::Anova(prop_model)
+
+# Get EMMs from full model, averaged over goal_type
+emm <- emmeans(prop_model, ~ experiment | move_type)
+
+# Pairwise comparisons between experiments within each move_type
+contrast_results <- contrast(emm, method = "pairwise", adjust = "tukey")
+
+contrast_results
+```
+### plot
+```{r}
+
+ggplot(prop_moves, aes(x = goal_type, y = prop, fill = experiment)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge(width = 0.8), width = 0.7) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", 
+               position = position_dodge(width = 0.8), 
+               width = 0.2) +
+  facet_wrap(~ move_type, scales = "free_y") +
+  labs(y = "Mean Proportion of Moves", x = "Goal Type") +
+  scale_fill_brewer(palette = "Set1") +
+  theme_minimal()
+```
+
