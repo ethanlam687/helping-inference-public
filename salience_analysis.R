@@ -1,7 +1,7 @@
 library(tidyverse)
 
-exp1_data <- read_csv("~/Downloads/final_first_moves.csv")
-exp2_data <- read_csv("~/Downloads/first_moves (1).csv")
+exp1_data <- read_csv("data/e1/final_first_moves.csv")
+exp2_data <- read_csv("data/e2/first_moves.csv")
 
 # convert flat grid index to (row, col)
 row_col <- function(index) {
@@ -110,7 +110,6 @@ combined <- combined %>%
     euclidean_diff = euclidean_salience - expected_euclidean
   )
 
-# Plotting the differences
 ggplot(combined, aes(x = experiment, y = stepwise_diff, fill = experiment)) +
   geom_boxplot(alpha = 0.7) +
   labs(
@@ -118,3 +117,14 @@ ggplot(combined, aes(x = experiment, y = stepwise_diff, fill = experiment)) +
     y = "Difference from Expected Stepwise Salience"
   ) +
   theme_minimal()
+
+ggplot(combined, aes(x = experiment, y = euclidean_diff, fill = experiment)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Euclidean Salience Difference from Expected",
+    y = "Difference from Expected Euclidean Salience"
+  ) +
+  theme_minimal()
+
+t.test(stepwise_diff ~ experiment, data = combined)
+t.test(euclidean_diff ~ experiment, data = combined)

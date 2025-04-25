@@ -164,7 +164,7 @@ class helper:
     # gnerate the utility matrix, moves for this new config
     u_i = general.generate_utility_matrix(configArray, goalspace)
     
-    # # shape of u_i is len(config_change) x 2 (for utility matrix of size future_moves x goal and future_move_labels)
+    # # shape of u_i is len(config_xchange) x 2 (for utility matrix of size future_moves x goal and future_move_labels)
     # for each u_i, we calculated expected utility 
     
     u_matrix = u_i[0]

@@ -1,87 +1,67 @@
-import pandas as pd
-import numpy as np
-import ast
-
-print('hello!')
-# helper functions
-
-def row_col(index: int, n_cols: int = 18) -> tuple:
-    row, col = index // n_cols, index % n_cols
-    return row, col
-
-def compute_salience(move_string: str, center_index: int = 44, n_cols: int = 18) -> dict:
-    start_idx = int(move_string.strip("()").split(",")[0])
-    r0, c0 = row_col(start_idx, n_cols)
-    rc, cc = row_col(center_index, n_cols)
-    stepwise  = abs(r0 - rc) + abs(c0 - cc)
-    euclidean = np.hypot(r0 - rc, c0 - cc)
-    return {'stepwise': stepwise, 'euclidean': euclidean}
-
-def sample_random_salience(possible_moves: list, n_samples: int = 1000,
-                           center_index: int = 44, n_cols: int = 18) -> dict:
-    sampled = np.random.choice(possible_moves, size=n_samples, replace=True)
-    steps = []; eus = []
-    for mv in sampled:
-        s = compute_salience(mv, center_index, n_cols)
-        steps.append(s['stepwise']); eus.append(s['euclidean'])
-    return {'expected_stepwise': np.mean(steps),
-            'expected_euclidean': np.mean(eus)}
-
-def sample_random_salience_by_utility(possible_moves: list, utilities: dict,
-                                      n_samples: int = 1000, center_index: int = 44,
-                                      n_cols: int = 18) -> dict:
-    serving     = [mv for mv in possible_moves if utilities.get(mv) == 1]
-    nonserving  = [mv for mv in possible_moves if utilities.get(mv) != 1]
-    out = {}
-    if serving:
-        r = sample_random_salience(serving, n_samples, center_index, n_cols)
-        out['serving_stepwise'], out['serving_euclidean'] = r['expected_stepwise'], r['expected_euclidean']
-    else:
-        out['serving_stepwise'], out['serving_euclidean'] = np.nan, np.nan
-    if nonserving:
-        r = sample_random_salience(nonserving, n_samples, center_index, n_cols)
-        out['nonserv_stepwise'], out['nonserv_euclidean'] = r['expected_stepwise'], r['expected_euclidean']
-    else:
-        out['nonserv_stepwise'], out['nonserv_euclidean'] = np.nan, np.nan
-    return out
-
+import pandas as pd, numpy as np, ast
 from pathlib import Path
 
+def row_col(idx, n_cols=18):
+    return idx // n_cols, idx % n_cols
 
+def compute_salience(move, center=44, n_cols=18):
+    i = int(move.strip("()").split(",")[0])
+    r0, c0 = row_col(i, n_cols)
+    rc, cc = row_col(center, n_cols)
+    return abs(r0-rc)+abs(c0-cc), np.hypot(r0-rc, c0-cc)
 
-# files to load
-exp1 = pd.read_csv("helping_inference/data/e1/final_first_moves.csv")
-exp2 = pd.read_csv("helping_inference/data/e2/first_moves.csv")
-exp1['experiment'] = 'exp1'
-exp2['experiment'] = 'exp2'
-df = pd.concat([exp1, exp2], ignore_index=True)
+def sample_saliences(moves, n=1000, by_util=None, center=44, n_cols=18):
+    """If by_util dict is passed, splits into serving vs non‑serving."""
+    if by_util:
+        groups = {
+            k: [m for m in moves if (by_util[m]==k)]
+            for k in (1, 0)  # 1=serving, 0=non‑serving
+        }
+        return {
+            name: sample_saliences(grp, n, None, center, n_cols)
+            for name, grp in (("serving", groups[1]), ("nonserv", groups[0]))
+        }
+    idxs = np.random.choice(moves, n, True)
+    s = [compute_salience(m, center, n_cols)[0] for m in idxs]
+    e = [compute_salience(m, center, n_cols)[1] for m in idxs]
+    return {"step": np.mean(s), "euc": np.mean(e)}
 
-# Parse list/dict columns
-df['possible_moves_list'] = df['possible_moves'].apply(ast.literal_eval)
-df['utilities_map']     = df['utilities'].apply(ast.literal_eval)
+def main():
+    exp1 = pd.read_csv("data/e1/final_first_moves.csv")
+    exp2 = pd.read_csv("data/e2/first_moves.csv")
 
-# Observed salience
-obs = df['first_move'].apply(compute_salience)
-df['stepwise_salience']   = obs.apply(lambda x: x['stepwise'])
-df['euclidean_salience'] = obs.apply(lambda x: x['euclidean'])
+    df = pd.concat(
+    [exp1.assign(expt="E1"), exp2.assign(expt="E2")],
+    ignore_index=True
+)
 
-# Baseline over all moves
-base_all = df['possible_moves_list'].apply(lambda pm: sample_random_salience(pm))
-df['expected_stepwise']   = base_all.apply(lambda x: x['expected_stepwise'])
-df['expected_euclidean'] = base_all.apply(lambda x: x['expected_euclidean'])
+    print(df.columns.tolist())
 
-# Baseline split by utility
-split = df.apply(lambda row: sample_random_salience_by_utility(
-    row['possible_moves_list'], row['utilities_map']), axis=1)
-df['serving_stepwise']   = split.apply(lambda x: x['serving_stepwise'])
-df['serving_euclidean'] = split.apply(lambda x: x['serving_euclidean'])
-df['nonserv_stepwise']   = split.apply(lambda x: x['nonserv_stepwise'])
-df['nonserv_euclidean']  = split.apply(lambda x: x['nonserv_euclidean'])
+    
+    # parse
+    df["moves"] = df["first_move_possible_moves"].apply(ast.literal_eval)
+    df["utils"] = df["utilities"].apply(ast.literal_eval)
+    
+    # compute all saliences in one go
+    sal = df["first_move"].map(compute_salience)
+    df[["step_obs","euc_obs"]] = pd.DataFrame(sal.tolist(), index=df.index)
+    
+    # random baseline
+    base_all = df["moves"].map(lambda m: sample_saliences(m))
+    df[["step_exp","euc_exp"]] = pd.DataFrame(base_all.tolist(), index=df.index)
+    
+    # utility‐split baseline
+    split = df.apply(lambda r: sample_saliences(r["moves"], by_util=r["utils"]), axis=1)
+    df[["step_s","euc_s","step_ns","euc_ns"]] = pd.DataFrame(
+        [{**v, **{f"{k}_{t}":u for (k,d) in v.items() for t,u in d.items()}} 
+         for v in split.tolist()], index=df.index
+    )
+    
+    # final
+    cols = ["expt","first_move","step_obs","step_exp","step_s","step_ns",
+            "euc_obs","euc_exp","euc_s","euc_ns"]
+    print(df[cols].head())
 
-# Select and display results
-result = df[[
-    'experiment', 'first_move',
-    'stepwise_salience', 'expected_stepwise', 'serving_stepwise', 'nonserv_stepwise',
-    'euclidean_salience','expected_euclidean','serving_euclidean','nonserv_euclidean'
-]]
-print(result.head())
+if __name__=="__main__":
+    print("Running salience_analysis")
+    main()
