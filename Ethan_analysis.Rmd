@@ -164,343 +164,87 @@ E2 players made significantly more useful moves than E1 players across all goal-
 
 For the "move" goal type, E2 players also made significantly more inconsequential moves than E1 players. 
 
-#### Move distribution by Experiment (not sorted by goal type)
 
-Only looking at proportion of useful, inconsequential, and harmful moves E1 vs E2 across all goal types. 
+
+# load packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lme4)
+library(emmeans)
+```
+
+# import data
 
 ```{r}
-library(tidyverse)
-
-e1 <- read_csv("data/e1/final_tracker.csv") %>%
-  filter(role == "architect") %>%
-  mutate(experiment = "E1")
-e2 <- read_csv("data/e2/final_tracker.csv") %>%
+e1 <- read_csv("data/e1/final_tracker.csv")
+e2 <- read_csv("data/e2/final_tracker.csv")%>%
   mutate(experiment = "E2")
-combined <- bind_rows(e1, e2)
+```
 
-combined <- combined %>%
+
+# E1 vs E2 move analysis
+
+```{r}
+combined <- bind_rows(e1 %>%
+  filter(role == "architect") %>%
+  mutate(experiment = "E1"), e2)%>%
   mutate(
-    move_utility = case_when(
-      move_utility == 1 ~ "useful",
-      move_utility == 0 ~ "inconsequential",
-      move_utility == -1 ~ "harmful"
+    move_type = case_when(
+      move_utility == 1 ~ "Useful",
+      move_utility == 0 ~ "Inconsequential",
+      move_utility == -1 ~ "Harmful"
     ),
-    move_type = str_to_title(move_utility)
-  )
-
-# total number of different move types by experiment
-move_summary <- combined %>%
-  group_by(experiment, move_utility) %>%
-  summarise(count = n(), .groups = 'drop') %>%
-  pivot_wider(names_from = move_utility, values_from = count, values_fill = 0) %>%
-  rename(
-    harmful = `harmful`,
-    inconsequential = `inconsequential`,
-    useful = `useful`
-  ) %>%
-  mutate(total_moves = harmful + inconsequential + useful)
-
-# per-participant proportions by experiment
-prop_moves_exp <- combined %>%
-  group_by(experiment, ID, anonID, move_type) %>%
-  summarise(count = n(), .groups = 'drop') %>%
-  pivot_wider(names_from = move_type, values_from = count, values_fill = 0) %>%
-  mutate(total_moves = Useful + Inconsequential + Harmful)
-
-
+  ID = ifelse(experiment == "E2", anonID, ID))
+```
+### model
+```{r}
 # COUNTING BY PROPORTION and Summary stats
 prop_moves <- combined %>%
-  group_by(ID, anonID, experiment) %>%
-  count(move_type, name = "move_count") %>%
+  count(experiment, ID, goal_type, move_type, name = "move_count") %>%
+  group_by(experiment, ID, goal_type) %>%
+  complete(move_type = c("Useful", "Harmful", "Inconsequential"), fill = list(move_count = 0)) %>%
   mutate(total_moves = sum(move_count),
          prop = move_count / total_moves) %>%
   ungroup() %>%
-  select(-move_count) %>%
-  pivot_wider(
-    names_from = move_type,
-    values_from = prop,
-    values_fill = 0
-  )
-view(prop_moves)
+  mutate(across(c(experiment, goal_type, move_type, ID), as.factor)) %>%
+  select(-move_count, -total_moves)
 
 
-prop_moves_summary_exp <- prop_moves %>%
-  group_by(experiment) %>%
-  summarise(
-    mean_Useful = mean(Useful),
-    sd_Useful = sd(Useful),
-    mean_Inconsequential = mean(Inconsequential),
-    sd_Inconsequential = sd(Inconsequential),
-    mean_Harmful = mean(Harmful),
-    sd_Harmful = sd(Harmful),
-    .groups = "drop"
-  )
-print(prop_moves_summary_exp)
+prop_model = lm(data = prop_moves, prop ~ experiment*move_type*goal_type)
+car::Anova(prop_model)
 
+# Get EMMs from full model, averaged over goal_type
+emm <- emmeans(prop_model, ~ experiment | move_type)
 
-library(ggpubr)
+# Pairwise comparisons between experiments within each move_type
+contrast_results <- contrast(emm, method = "pairwise", adjust = "tukey")
 
-ggboxplot(
-  anova_data,
-  x        = "Move_Type",
-  y        = "Prop",
-  color    = "experiment",
-  palette  = "jco",
-  add      = "jitter"
-) +
-  rotate_x_text(30)
-
+contrast_results
 ```
-
-
-
-
-
-#### **CONFUSED ABOUT CODE** ANOVA for move types across experiments
+### plot
 ```{r}
-library(tidyverse)
-library(rstatix)
-library(ez)
-library(ggpubr)
 
-anova_data <- prop_moves %>%
-  rename(Subject = anonID) %>%
-  pivot_longer(
-    cols = c(Useful, Inconsequential, Harmful),
-    names_to = "Move_Type",
-    values_to = "Prop"
-  ) %>%
-  mutate(
-    Subject = factor(Subject),
-    experiment = factor(experiment, levels = c("E1", "E2")),
-    Move_Type = factor(Move_Type, levels = c("Useful", "Inconsequential", "Harmful"))
-  )
-anova_data <- anova_data %>%
-  complete(
-    Subject, nesting(experiment), Move_Type, fill = list(Prop = 0)) 
-
-
-norm_tests <- anova_data %>%
-  group_by(experiment, Move_Type) %>%
-  shapiro_test(Prop)
-print(norm_tests)
-
-# Homogeneity of variances
-levene <- anova_data %>%
-  levene_test(Prop ~ experiment)
-print(levene)
-
-ez_res_mixed <- ezANOVA(
-  data = anova_data,
-  dv = Prop,
-  wid = Subject,
-  within = .(Move_Type),
-  between = experiment,
-  within_full = .(Move_Type),
-  type = 3,
-  detailed = TRUE
-)
-print(ez_res_mixed)
-
-posthoc_mt <- anova_data %>%
-  pairwise_t_test(
-    Prop ~ Move_Type,
-    paired           = TRUE,
-    p.adjust.method  = "bonferroni"
-  )
-print(posthoc_mt)
-
-posthoc_exp <- anova_data %>%
-  pairwise_t_test(
-    Prop ~ experiment,
-    paired = FALSE,
-    p.adjust.method = "bonferroni"
-  )
-print(posthoc_exp)
-
-
-
-library(dplyr)
-library(rstatix)
-
-exp_summary <- anova_data %>%
-  group_by(Subject, experiment) %>%
-  summarise(
-    overall_prop = mean(Prop),   # or sum(Prop) if you’d rather
-    .groups = "drop"
-  )
-
-posthoc_exp <- exp_summary %>%
-  t_test(
-    overall_prop ~ experiment,
-    paired = FALSE,
-    p.adjust.method = "bonferroni"
-  )
-
-print(posthoc_exp)
-
+ggplot(prop_moves, aes(x = goal_type, y = prop, fill = experiment)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge(width = 0.8), width = 0.7) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", 
+               position = position_dodge(width = 0.8), 
+               width = 0.2) +
+  facet_wrap(~ move_type, scales = "free_y") +
+  labs(y = "Mean Proportion of Moves", x = "Goal Type") +
+  scale_fill_brewer(palette = "Set1") +
+  theme_minimal()
 ```
 
-## ***ANOVA TEST**
 
 ``` {r}
-library(dplyr)
-library(tidyr)
-library(rstatix)
-library(ggpubr)
-
-prop_moves <- prop_moves %>%
-  mutate(
-    ID = factor(ID),
-    goal_type = factor(goal_type),
-    experiment = factor(experiment, levels = c("E1", "E2")),
-    move_type = factor(move_type, levels = c("Useful", "Inconsequential", "Harmful"))
-  )
-
-prop_moves %>%
-  group_by(experiment, move_type, goal_type) %>%
-  get_summary_stats(prop, type = "mean_sd")
-
-
-# visualization, further divided by goal type
-ggboxplot(
-  prop_moves, x = "move_type", y = "prop", color = "experiment", facet.by = "goal_type", add = "point", palette = "jco"
-) +
-  rotate_x_text(30)
-
-# visualization, all gaol types together
-ggboxplot(
-  prop_moves, x = "move_type", y = "prop", color = "experiment", palette = "jco"
-)
-bxp
-
-anova_results <- prop_moves %>%
-  group_by(goal_type) %>%
-  anova_test(
-    dv       = prop,
-    wid      = ID,
-    within   = c(experiment, move_type),
-    type     = 3,
-    detailed = TRUE,
-  ) %>%
-  get_anova_table()
-
-print(anova_results)
-
-
 
 
 ```
 
+
+
 ```{r}
-library(lme4)        
-library(emmeans)     
-library(broom.mixed) 
-library(knitr)       
-library(gt)
-
-lmer_mod <- lmer(
-  count ~ goal_type * move_type + (1|ID),
-  data = long_tbl,
-  REML = FALSE
-)
-
-anova(lmer_mod)
-
-# Get emmeans
-emm <- emmeans(lmer_mod, ~ goal_type * move_type)
-
-# Marginal means by move_type
-emmeans(lmer_mod, ~ move_type) %>% summary()
-
-# Marginal means by goal_type
-emmeans(lmer_mod, ~ goal_type) %>% summary()
-
-# Interaction: move_type | goal_type
-emmeans(lmer_mod, ~ move_type | goal_type) %>% summary()
-
-# Pairwise contrasts for the interaction
-contrast_raw <- emmeans(lmer_mod, ~ move_type | goal_type) %>% 
-  contrast("pairwise") %>% 
-  confint()
-
-
-# ANOVA table
-anova_tbl <- anova(lmer_mod) %>% 
-  as.data.frame() %>% 
-  rownames_to_column("Term") %>%
-  mutate_if(is.numeric, ~ round(.x, 3))
-
-
-# Estimated Marginal Means for the interaction
-emm_inter <- emmeans(lmer_mod, ~ move_type | goal_type)
-emm_tbl   <- as.data.frame(emm_inter) %>%
-  rename(
-    Goal       = goal_type,
-    Move       = move_type,
-    Emm        = emmean,
-    SE         = SE,
-    DF         = df,
-  ) %>%
-  mutate_if(is.numeric, ~ round(.x, 3))
-
-
-# Pairwise Contrasts within each goal_type
-contrast_raw <- emm_inter %>%
-  contrast("pairwise")
-
-contrast_tbl <- broom::tidy(contrast_raw, conf.int = TRUE) %>%
-  rename(
-    Goal      = goal_type,
-    Contrast  = contrast,
-    Estimate  = estimate,
-    SE        = std.error,
-    DF        = df,
-    t_value   = statistic,      
-    p_value   = adj.p.value,    
-    CI_Low    = conf.low,
-    CI_High   = conf.high
-  ) %>%
-  select(Goal, Contrast, Estimate, SE, DF, t_value, p_value, CI_Low, CI_High) %>%
-  mutate(across(where(is.numeric), ~ round(.x, 3)))
-
-
-
-
-# 1) ANOVA table
-anova_tbl %>%
-  gt() %>%
-  tab_header(
-    title = "ANOVA Table for Mixed-Effects Model"
-  ) %>%
-  fmt_number(
-    columns = where(is.numeric),
-    decimals = 3
-  )
-
-# 2) Estimated Marginal Means interaction table
-emm_tbl %>%
-  gt() %>%
-  tab_header(
-    title = "Estimated Marginal Means of Move Type by Goal"
-  ) %>%
-  fmt_number(
-    columns = where(is.numeric),
-    decimals = 3
-  )
-
-# 3) Pairwise contrasts table
-contrast_tbl %>%
-  gt() %>%
-  tab_header(
-    title = "Pairwise Contrasts of Move Type within Each Goal"
-  ) %>%
-  fmt_number(
-    columns = where(is.numeric),
-    decimals = 3
-  )
-
-
 ```
 
 
@@ -610,13 +354,52 @@ ggplot(df_comb, aes(x = arch_rank, y = helper_utility, fill = arch_rank)) +
 # Extended to all moves
 
 ```{r}
+library(tidyverse)
+library(rstatix)
+library(ggpubr)
+library(broom)
 
-library(reticulate)
+# 1) Read & join architect ranks + helper first-move data
+arch <- read_csv("data/e1/final_first_moves.csv") %>%
+  rename(id = ID) %>%
+  select(id, goal, first_move_rank)
 
-source_python("utils.py")
+helpers <- read_csv("data/e1/final_tracker.csv") %>%
+  rename(id = ID) %>%
+  filter(role == "helper", move_id == 1) %>%
+  select(id, goal, helper_move = move, helper_utility = move_utility)
 
-configArray()
-moveable_indices <- moveable_indices(configArray)
+df_comb <- arch %>%
+  inner_join(helpers, by = c("id","goal"))
+
+# 2) Make a 4-level helper_class
+df_comb <- df_comb %>%
+  mutate(
+    helper_class = case_when(
+      helper_move == "pass"         ~ "pass",
+      helper_utility ==  1          ~ "useful_move",
+      helper_utility ==  0          ~ "inconsequential_move",
+      helper_utility == -1          ~ "harmful_move"
+    ) %>%
+    factor(levels = c("pass","useful_move","inconsequential_move","harmful_move"))
+  )
+
+# 3) Frequencies & proportions of each class
+df_comb %>%
+  count(helper_class) %>%
+  mutate(prop = n / sum(n)) %>%
+  print()
+
+# 4) Mean ± SD of architect first_move_rank by helper_class
+df_comb %>%
+  group_by(helper_class) %>%
+  summarise(
+    mean_rank = mean(first_move_rank, na.rm = TRUE),
+    sd_rank   = sd(first_move_rank,   na.rm = TRUE),
+    n         = n(),
+    .groups   = "drop"
+  ) %>%
+  print()
 
 ```
 
@@ -624,8 +407,6 @@ moveable_indices <- moveable_indices(configArray)
 
 
 ```{r}
-
-em_means
 
 
 ```
