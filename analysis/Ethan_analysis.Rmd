@@ -1,205 +1,54 @@
 ---
 title: "E1 and E2 Data Analysis"
 output: html_notebook
+editor_options: 
+  chunk_output_type: inline
 ---
 
-# Comparison of the move distributions between E1 and E2 and across Goal Types
 
-```{r}
-library(tidyverse)
-
-e1 <- read_csv("data/e1/final_tracker.csv")
-e2 <- read_csv("data/e2/final_tracker.csv")
-
-e1_architects <- e1 %>%
-  filter(role == "architect") %>%
-  mutate(experiment = "E1")
-
-e2 <- e2 %>%
-  mutate(experiment = "E2")
-
-combined <- bind_rows(e1_architects, e2)
-
-combined <- combined %>%
-  mutate(
-    move_utility = case_when(
-      move_utility == 1 ~ "useful",
-      move_utility == 0 ~ "inconsequential",
-      move_utility == -1 ~ "harmful"
-    ),
-    move_type = case_when(
-      move_utility == "useful" ~ "Useful",
-      move_utility == "inconsequential" ~ "Inconsequential",
-      move_utility == "harmful" ~ "Harmful"
-    )
-  )
-
-# total number of different move types
-move_summary <- combined %>%
-  group_by(experiment, move_utility, goal_type) %>%
-  summarise(count = n(), .groups = 'drop') %>%
-  pivot_wider(names_from = move_utility, values_from = count, values_fill = 0) %>%
-  rename(
-    harmful = `harmful`,
-    inconsequential = `inconsequential`,
-    useful = `useful`
-  ) %>%
-  mutate(total_moves = harmful + inconsequential + useful)
-
-# average distribution of moves per participant, grouped by goal type and experiment
-avg_moves_by_goal <- combined %>%
-  group_by(experiment, ID, anonID, goal_type, move_type) %>%
-  summarise(count = n(), .groups = 'drop') %>%
-  pivot_wider(names_from = move_type, values_from = count, values_fill = 0) %>%
-  mutate(total_moves = Useful + Inconsequential + Harmful)
-
-
-# COUNTING BY PROPORTION and Summary stats
-prop_moves <- combined %>%
-  group_by(ID, goal_type, experiment) %>%
-  count(move_type, name = "move_count") %>%
-  mutate(total_moves = sum(move_count),
-         prop = move_count / total_moves) %>%
-  ungroup()
-
-prop_wide <- prop_moves %>%
-  select(-move_count) %>%
-  pivot_wider(
-    names_from = move_type,
-    values_from = prop,
-    values_fill = 0
-  )
-
-print(prop_wide)
-
-prop_moves_summary <- prop_wide %>%
-  group_by(goal_type, experiment) %>%
-  summarise(
-    mean_Useful = mean(Useful),
-    sd_Useful = sd(Useful),
-    mean_Inconsequential = mean(Inconsequential),
-    sd_Inconsequential = sd(Inconsequential),
-    mean_Harmful = mean(Harmful),
-    sd_Harmful = sd(Harmful),
-  )
-print(prop_moves_summary)
-
-# summary statistics: mean and SD of move types across goal types and experiments
-avg_moves_summary <- avg_moves_by_goal %>%
-  group_by(goal_type, experiment) %>%
-  summarise(
-    mean_Useful = mean(Useful),
-    sd_Useful = sd(Useful),
-    mean_Inconsequential = mean(Inconsequential),
-    sd_Inconsequential = sd(Inconsequential),
-    mean_Harmful = mean(Harmful),
-    sd_Harmful = sd(Harmful),
-    mean_total_moves = mean(total_moves),
-    sd_total_moves = sd(total_moves)
-  )
-print(avg_moves_summary)
-
-```
-
-##### Visualization of move distributions
-
-```{r}
-library(ggplot2)
-
-ggplot(avg_moves_summary, aes(x = goal_type, y = mean_Useful, fill = experiment)) +
-  geom_bar(stat = "identity", position = "dodge", alpha = 0.7) + 
-  geom_errorbar(aes(ymin = mean_Useful - sd_Useful, ymax = mean_Useful + sd_Useful),
-  position = position_dodge(width = 0.9),
-  width = 0.2) +
-  labs(title = "Players' Avg Number of Useful Moves Per Goal Type by Experiment",
-       x = "Goal Type", y = "Average Useful Moves Per Player", fill = "Experiment" ) +
-  theme_minimal()
-
-ggplot(avg_moves_summary, aes(x = goal_type, y = mean_Harmful, fill = experiment)) +
-  geom_bar(stat = "identity", position = "dodge", alpha = 0.7) +
-  geom_errorbar(aes(ymin = mean_Harmful - sd_Harmful, ymax = mean_Harmful + sd_Harmful),
-  position = position_dodge(width = 0.9),
-  width = 0.2) +
-  labs(title = "Players' Avg Number of Harmful Moves Per Goal Type by Experiment",
-       x = "Goal Type", y = "Average Harmful Moves Per Player", fill = "Experiment") +
-  theme_minimal()
-
-ggplot(avg_moves_summary, aes(x = goal_type, y = mean_Inconsequential, fill = experiment)) +
-  geom_bar(stat = "identity", position = "dodge", alpha = 0.7) +
-  geom_errorbar(aes(ymin = mean_Inconsequential - sd_Inconsequential, ymax = mean_Inconsequential + sd_Inconsequential),
-  position = position_dodge(width = 0.9),
-  width = 0.2) +
-  labs(title = "Players' Avg Number of Inconsequential Moves Per Goal Type by Experiment",
-       x = "Goal Type", y = "Average Inconsequential Moves Per Player", fill = "Experiment") +
-  theme_minimal()
-
-# BY PROPORTION
-
-library(dplyr)
-library(ggplot2)
-
-# 2) Bar‐chart with error bars
-ggplot(prop_summary, aes(x = move_type, y = mean_prop, fill = experiment)) +
-  geom_col(position = position_dodge(width = 0.8), width = 0.7, alpha = 0.8) +
-  geom_errorbar(aes(ymin = ci_low, ymax = ci_high),
-                position = position_dodge(width = 0.8),
-                width = 0.2) +
-  labs(
-    title = "Mean Proportion of Move Types by Experiment",
-    x     = "Move Type",
-    y     = "Mean Proportion",
-    fill  = "Experiment"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 30, hjust = 1)
-  )
-
-
-```
-
-##### Statistical Tests Comparing Move Types Across Experiments
-
-E2 players made significantly more useful moves than E1 players across all goal-types. 
-
-For the "move" goal type, E2 players also made significantly more inconsequential moves than E1 players. 
-
-
-
-# load packages
+# Load packages
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lme4)
 library(emmeans)
+library(ggplot2)
+library(dplyr)
+library(broom)
+library(rstatix)
+library(ggpubr)
+library(car)
 ```
 
-# import data
+# Import data
 
 ```{r}
-e1 <- read_csv("data/e1/final_tracker.csv")
-e2 <- read_csv("data/e2/final_tracker.csv")%>%
+e1 <- read_csv("../data/e1/final_tracker.csv") %>%
+  mutate(experiment = "E1")
+e2 <- read_csv("../data/e2/final_tracker.csv")%>%
   mutate(experiment = "E2")
+e1_first_moves <- read_csv("../data/e1/final_first_moves.csv")
+
 ```
 
-
-# E1 vs E2 move analysis
+# Architect move utility comparison between E1 and E2 and across goal types
 
 ```{r}
-combined <- bind_rows(e1 %>%
-  filter(role == "architect") %>%
-  mutate(experiment = "E1"), e2)%>%
+
+e1_architects <- e1 %>%
+  filter(role == "architect")
+
+combined <- bind_rows(e1_architects, e2) %>%
   mutate(
     move_type = case_when(
       move_utility == 1 ~ "Useful",
       move_utility == 0 ~ "Inconsequential",
       move_utility == -1 ~ "Harmful"
     ),
-  ID = ifelse(experiment == "E2", anonID, ID))
-```
-### model
-```{r}
-# COUNTING BY PROPORTION and Summary stats
+    ID = ifelse(experiment == "E2", anonID, ID)
+  )
+
+# counting move_types by proportion
 prop_moves <- combined %>%
   count(experiment, ID, goal_type, move_type, name = "move_count") %>%
   group_by(experiment, ID, goal_type) %>%
@@ -211,6 +60,31 @@ prop_moves <- combined %>%
   select(-move_count, -total_moves)
 
 
+
+# check that proportions add to 1
+prop_moves %>%
+  group_by(experiment, ID, goal_type) %>%
+  summarise(total_prop = sum(prop)) %>%
+  ungroup()
+
+
+# quick summary 
+prop_moves_summary <- prop_moves %>%
+  group_by(goal_type, experiment, move_type) %>%
+  summarise(
+    mean_prop = mean(prop),
+    sd_prop = sd(prop),
+    .groups = "drop"
+  )
+
+```
+
+
+
+### ANOVA
+
+```{r}
+
 prop_model = lm(data = prop_moves, prop ~ experiment*move_type*goal_type)
 car::Anova(prop_model)
 
@@ -218,13 +92,12 @@ car::Anova(prop_model)
 emm <- emmeans(prop_model, ~ experiment | move_type)
 
 # Pairwise comparisons between experiments within each move_type
-contrast_results <- contrast(emm, method = "pairwise", adjust = "tukey")
+distr_contrast_results <- contrast(emm, method = "pairwise", adjust = "tukey")
 
-contrast_results
+distr_contrast_results
 ```
-### plot
+### Visualization of move distribution between e1 architects and e2 players 
 ```{r}
-
 ggplot(prop_moves, aes(x = goal_type, y = prop, fill = experiment)) +
   stat_summary(fun = mean, geom = "bar", position = position_dodge(width = 0.8), width = 0.7) +
   stat_summary(fun.data = mean_se, geom = "errorbar", 
@@ -236,177 +109,78 @@ ggplot(prop_moves, aes(x = goal_type, y = prop, fill = experiment)) +
   theme_minimal()
 ```
 
-
-``` {r}
-
-
-```
-
-
+# Helper's move utility following architect's first move rank (pragmatism)
 
 ```{r}
-```
 
+# read & join architect ranks + helper first-move data
+e1_first_moves %>%
+  select(ID, goal, first_move_rank)
 
-# Follow-up measure of pragmatism seen through Helper's move utility following rank of Architect's first move (pragmatism rank). 
-
-Found no significant correlation between architect first move rank and helper utility. 
-
-```{r}
-library(tidyverse)
-
-# select architects' first‐move rank
-arch <- read_csv("data/e1/final_first_moves.csv") %>%
-  rename(id = ID) %>%
-  select(id,goal, first_move_rank)
-
-# select helper's first move utility
-helpers <- read_csv("data/e1/final_tracker.csv") %>%
-  rename(id = ID) %>%
+helpers <- e1 %>%
   filter(role == "helper", move_id == 1) %>%
-  select(id, goal, helper_move = move, helper_utility = move_utility) %>%
-  mutate(
-    helper_action = if_else(helper_move == "pass", "pass", "move")
-  )
+  select(ID, goal, helper_move = move, helper_utility = move_utility)
 
-# join architect ranks to helper utilities
-df_comb <- arch %>%
-  inner_join(helpers, by = c("id","goal"))
+helper_arch_comb <- e1_first_moves %>%
+  inner_join(helpers, by = c("ID","goal"))
 
-# classify into useful, harmful etc.
-
-df_comb %>% group_by(helper_action) %>% 
-  summarize(mean_rank = mean(first_move_rank, na.rm = TRUE))%>%
-  ggplot(aes(x = helper_action, y = mean_rank)) +
-  geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7)
-
-# how often will helpers pass or move on their first move? 
-df_comb %>%
-  count(helper_action) %>%
-  mutate(prop = n / sum(n))
-
-# do more pragmatic arch moves reduce the chance of a pass?
-
-# create a arch_rank column based on the median of first_move_rank, splitting into high and low rank
-df_comb <- df_comb %>%
-  mutate(arch_rank = if_else(first_move_rank <= median(first_move_rank, na.rm = TRUE), "high_prag", "low_prag"))
-
-helper_pass_summary <- df_comb %>%
-# count how many helper_actions occurred in each arch_rank
-  count(arch_rank, helper_action) %>%
-  group_by(arch_rank) %>%
-  mutate(prop = n / sum(n)) %>%
-  ungroup()
-
-
-print(helper_pass_summary)
-
-
-
-# Spearman correlation between first_move_rank and helper_utility
-
-library(broom)
-library(dplyr)
-
-tidy(cor_result <- cor.test(df_comb$first_move_rank,
-                    df_comb$helper_utility,
-                    method = "spearman")) %>%
-  transmute(
-    rho = round(estimate, 2),
-    p_value = round(p.value, 3),
-  )
-
-
-
-# visualize data with scatterplot
-ggplot(df_comb, aes(x = first_move_rank, y = helper_utility)) +
-  geom_jitter(width = 0.2, height = 0.05, alpha = 0.6) +
-  geom_smooth(method = "loess", se = TRUE, color = "steelblue") +
-  labs(
-    title = "Helper Utility vs. Architect First Move Rank",
-    x = "Architect First Move Rank (lower = more pragmatic)",
-    y = "Helper Move Utility"
-  ) +
-  theme_minimal()
-
-# boxplot for group comparision
-df_comb <- df_comb %>%
-  mutate(
-    arch_rank = factor(
-      arch_rank,
-      levels = c("high_prag", "low_prag"),
-      labels = c("High Pragmatism", "Low Pragmatism")
-  )
-)
-ggplot(df_comb, aes(x = arch_rank, y = helper_utility, fill = arch_rank)) +
-  geom_boxplot(alpha = 0.7) +
-  geom_jitter(width = 0.2, height = 0.05, alpha = 0.5, color = "black", size = 0.8) +
-  scale_fill_brewer(palette = "Set2", guide = "none") +
-  labs(
-    title = "Helper Utility by Architect Pragmatism",
-    x = "Architect Pragmatism",
-    y = "Helper Move Utility"
-  ) +
-  theme_minimal()
-
-```
-
-# Extended to all moves
-
-```{r}
-library(tidyverse)
-library(rstatix)
-library(ggpubr)
-library(broom)
-
-# 1) Read & join architect ranks + helper first-move data
-arch <- read_csv("data/e1/final_first_moves.csv") %>%
-  rename(id = ID) %>%
-  select(id, goal, first_move_rank)
-
-helpers <- read_csv("data/e1/final_tracker.csv") %>%
-  rename(id = ID) %>%
-  filter(role == "helper", move_id == 1) %>%
-  select(id, goal, helper_move = move, helper_utility = move_utility)
-
-df_comb <- arch %>%
-  inner_join(helpers, by = c("id","goal"))
-
-# 2) Make a 4-level helper_class
-df_comb <- df_comb %>%
+# make 4-level helper_class
+helper_arch_comb <- helper_arch_comb %>%
   mutate(
     helper_class = case_when(
-      helper_move == "pass"         ~ "pass",
-      helper_utility ==  1          ~ "useful_move",
-      helper_utility ==  0          ~ "inconsequential_move",
-      helper_utility == -1          ~ "harmful_move"
+      helper_move == "pass"         ~ "Pass",
+      helper_utility ==  1          ~ "Useful move",
+      helper_utility ==  0          ~ "Inconsequential move",
+      helper_utility == -1          ~ "Harmful move"
     ) %>%
-    factor(levels = c("pass","useful_move","inconsequential_move","harmful_move"))
+    factor(levels = c("Pass","Useful move","Inconsequential move","Harmful move"))
   )
 
-# 3) Frequencies & proportions of each class
-df_comb %>%
+# frequencies & proportions of each class
+helper_arch_comb %>%
   count(helper_class) %>%
-  mutate(prop = n / sum(n)) %>%
-  print()
+  mutate(prop = n / sum(n))
 
-# 4) Mean ± SD of architect first_move_rank by helper_class
-df_comb %>%
+# summary of architect first_move_rank by helper_class
+helper_arch_comb_summary <- helper_arch_comb %>%
   group_by(helper_class) %>%
   summarise(
     mean_rank = mean(first_move_rank, na.rm = TRUE),
     sd_rank   = sd(first_move_rank,   na.rm = TRUE),
     n         = n(),
     .groups   = "drop"
-  ) %>%
-  print()
+  )
 
 ```
 
 
-
+# One-way ANOVA on first move rank by 4 helper class levels
 
 ```{r}
+aov_model <- lm(first_move_rank ~ helper_class, data = helper_arch_comb)
+car::Anova(aov_model)  
+
+# estimated marginal means & Tukey‐adjusted pairwise contrasts
+emm <- emmeans(aov_model, ~ helper_class)
+helper_arch_contrast_res <- contrast(emm, method = "pairwise", adjust = "tukey")
+
+helper_arch_contrast_res
+
+```
+
+# Visualizaion of helper move utility following architect first move rank
+
+```{r}
+
+ggplot(helper_arch_comb, aes(x = helper_class, y = first_move_rank, fill = helper_class)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge(.8), width = .7) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", position = position_dodge(.8), width = .2) +
+  labs(
+    x = "Helper Move Classification",
+    y = "Mean Architect First-Move Rank"
+  ) +
+  scale_fill_brewer(palette = "Set2", guide = "none") +
+  theme_minimal()
 
 
 ```
