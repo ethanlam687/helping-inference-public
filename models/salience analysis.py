@@ -8,38 +8,28 @@ if not hasattr(np, "VisibleDeprecationWarning"):
     np.VisibleDeprecationWarning = DeprecationWarning
 from utils import general
 
-def parse_config(raw):
-    """
-    Given the raw CSV cell, extract a list of color strings.
-    Handles:
-      - Python list literal: "['white','red',...]"
-      - NumPy array string: "array(['white',...], dtype=object)"
-      - Any other wrapper, by finding all quoted tokens.
-    """
-    if isinstance(raw, str):
-        # Find all occurrences of 'white', 'red', 'blue', or 'green'.
-        colors = re.findall(r"'([^']+)'", raw)
-        return colors
-    else:
-        # Already a list
-        return raw
+# Salience constants
+TRUE_CENTER = 44
+GOAL_CENTER = 73 
+
+# salience helper functions
+
+def pick_center(goal_type: str) -> int:
+    return GOAL_CENTER if goal_type in ("cover", "uncover") else TRUE_CENTER
 
 def row_col(index: int, n_cols: int = 18) -> tuple[int,int]:
     # Convert a flat grid index into (row, col) on an n_cols-wide grid.
     return index // n_cols, index % n_cols
 
+
+
+# salience computation functions
+
 def compute_salience(move_str: str,
-                     center_idx: int = 44,
+                     center_idx: int,
                      n_cols: int = 18) -> dict[str,float]:
     """
-    Compute Manhattan ("stepwise") and Euclidean ("euclidean") distance
-    from the grid center for a single move.
-
-    - move_str: players' first move; something like "(23,5)" and pull out the first number as the flat index
-    - center_idx: flat index of the grid center
-    - n_cols: number of columns in the grid
-
-    Returns {"stepwise": ..., "euclidean": ...}.
+    Compute Stepwise and Euclidean salience from chosen center
     """
     idx = int(move_str.strip("()").split(",")[0])
     r, c = row_col(idx, n_cols)
@@ -49,20 +39,25 @@ def compute_salience(move_str: str,
         "euclidean_salience": np.hypot(r - rc, c - cc)
     }
 
-def add_salience_columns(df: pd.DataFrame,
-                         move_col: str = "first_move",
-                         center_idx: int = 44,
-                         n_cols: int = 18) -> pd.DataFrame:
+
+def add_salience_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Given a DataFrame with a column of move-strings, compute and append
+    Given a df with a column of move-strings, compute and append
     'stepwise_salience' and 'euclidean_salience' columns.
     """
-    sal = df[move_col].apply(compute_salience,
-                             center_idx = center_idx,
-                             n_cols = n_cols)
+    sal = df.apply(
+        lambda r: compute_salience(
+            r['first_move'],
+            center_idx=pick_center(r['goal_type'])
+        ),
+        axis=1
+    )
     sal_df = pd.DataFrame(sal.tolist(), index=df.index)
-    return pd.concat([df, sal_df], axis = 1)
-        
+    return pd.concat([df, sal_df], axis=1)
+
+""""
+# WORING ON DEBUG
+
 def random_salience_baseline(row, n_samples: int = 1000):
     # parse configuration
     config = parse_config(row["before_first_move"])
@@ -122,42 +117,32 @@ def random_salience_baseline(row, n_samples: int = 1000):
         "diff_serv_step": actual["stepwise_salience"] - avg_serv_s,
         "diff_serv_euc": actual["euclidean_salience"] - avg_serv_e,
     })
-
-def load_and_process_csv(path: str, label: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    if "role" in df.columns:
-        df = df[df["role"] == "architect"]
-    df = add_salience_columns(df)
-    return df.assign(experiment=label)
+"""
 
 def main():
     files = [
         ("data/e1/final_first_moves.csv", "E1"),
-        ("data/e2/first_moves.csv", "E2")
+        ("data/e2/first_moves.csv",        "E2")
     ]
-    combined = pd.concat(
-        (load_and_process_csv(path, label) for path, label in files),
-        ignore_index=True
-    )
-    combined["goal_type"] = combined["goal"].str.split().str[0]
+    dfs = []
+    for path, label in files:
+        df = pd.read_csv(path)
+        # only E2 has a 'role' column to filter
+        if label == "E2" and "role" in df.columns:
+            df = df[df['role'] == 'architect']
+        df['experiment'] = label
+        df['goal_type']  = df['goal'].str.split().str[0]
+        df = add_salience_columns(df)
+        dfs.append(df)
 
-    baseline = combined.apply(random_salience_baseline, axis = 1)
-    combined = pd.concat([combined, baseline], axis = 1)
-
-    metrics = [
-        "stepwise_salience", "euclidean_salience",           # observed saliences
-      "avg_rand_step", "avg_rand_euc",   # randomly sampled saliences
-      "avg_serv_step","avg_serv_euc"     # goal serving random only
-    ]
+    combined = pd.concat(dfs, ignore_index=True)
 
     summary = (
-        combined.groupby(["goal_type", "experiment"])[metrics]
-        .agg(["mean", "std", "count"])
+        combined
+        .groupby(['goal_type', 'experiment'])[['stepwise_salience', 'euclidean_salience']]
+        .agg(['mean', 'std', 'count'])
     )
     print(summary)
-
-    combined.to_csv("salience_with_baselines.csv", index=False)
-    print("\n→ Wrote salience_with_baselines.csv")
 
 if __name__ == "__main__":
     main()
