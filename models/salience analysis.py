@@ -122,7 +122,7 @@ def random_salience_baseline(row, n_samples: int = 1000):
 def main():
     files = [
         ("data/e1/final_first_moves.csv", "E1"),
-        ("data/e2/first_moves.csv",        "E2")
+        ("data/e2/first_moves.csv", "E2")
     ]
     dfs = []
     for path, label in files:
