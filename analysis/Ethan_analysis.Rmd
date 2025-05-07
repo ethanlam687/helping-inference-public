@@ -28,6 +28,7 @@ e1 <- read_csv("../data/e1/final_tracker.csv") %>%
 e2 <- read_csv("../data/e2/final_tracker.csv")%>%
   mutate(experiment = "E2")
 e1_first_moves <- read_csv("../data/e1/final_first_moves.csv")
+combined_saliences <- read_csv("../analysis/salience_first_moves.csv")
 
 ```
 
@@ -184,6 +185,75 @@ ggplot(helper_arch_comb, aes(x = helper_class, y = first_move_rank, fill = helpe
 
 
 ```
+
+# Salience Analyses
+
+
+## Stepwise and Euclidean Salience ANOVA Analysis
+
+```{r}
+
+# stepwise
+step_model <- lm(stepwise_salience ~ experiment * goal_type, data = combined_saliences)
+car::Anova(step_model) 
+
+# Get EMMs for experiment within each goal_type
+emm_goal <- emmeans(step_model, ~ experiment | goal_type)
+
+# Pairwise comparisons between experiments within goal_type
+step_contrast_results <- contrast(emm_goal, method = "pairwise", adjust = "tukey")
+print(step_contrast_results)
+
+# euclidean
+eucl_model <- lm(euclidean_salience ~ experiment * goal_type, data = combined_saliences)
+car::Anova(eucl_model)
+
+emm_eucl_goal <- emmeans(eucl_model, ~ experiment | goal_type)
+  
+eucl_contrast_results <- contrast(emm_eucl_goal, method = "pairwise", adjust = "tukey")
+print(eucl_contrast_results)
+
+```
+
+## Salience Visualization across goal types 
+
+```{r}
+
+long_sal <- combined_saliences %>%
+  pivot_longer(
+    cols     = c(stepwise_salience, euclidean_salience),
+    names_to = "salience_type",
+    values_to= "salience"
+  )
+
+ggplot(long_sal,
+       aes(x = experiment, y = salience, fill = experiment)) +
+  stat_summary(fun     = mean,
+               geom    = "bar",
+               position= position_dodge(.8),
+               width   = .7) +
+  stat_summary(fun.data = mean_se,
+               geom     = "errorbar",
+               position = position_dodge(.8),
+               width    = .2) +
+  facet_grid(salience_type ~ goal_type,
+             scales   = "free_y",
+             labeller = labeller(
+               salience_type = c(
+                 stepwise_salience  = "Stepwise",
+                 euclidean_salience = "Euclidean"
+               )
+             )
+  ) +
+  labs(x     = "Experiment",
+       y     = "Mean Salience",
+       title = "Stepwise vs Euclidean Salience by Goal Type") +
+  scale_fill_brewer(palette = "Set2", guide = "none") +
+  theme_minimal()
+
+```
+
+
 
 
 
