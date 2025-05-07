@@ -55,94 +55,100 @@ def add_salience_columns(df: pd.DataFrame) -> pd.DataFrame:
     sal_df = pd.DataFrame(sal.tolist(), index=df.index)
     return pd.concat([df, sal_df], axis=1)
 
-""""
-# WORING ON DEBUG
+def random_baseline_salience(config, goal_type=None, n_samples=1000, n_cols=18):
+    
+    """
+    Compute the baseline random saliences for a given board config by
+       - sampling n_samples moves at random
+       - computing their salience relative to the appropriate center
+       - averaging the stepwise and euclidean salience scores
+    
+    Arguments:
+        config: the current board configuration
+        goal_type: one of "cover"/"uncover" or None; if None, uses TRUE_CENTER
+        n_samples: number of random moves to sample (default=1000)
+        n_cols: grid width (18)
+    
+    Returns:
+        dict with keys
+          'stepwise' --> average stepwise salience
+          'euclidean' --> average Euclidean salience
+    """
 
-def random_salience_baseline(row, n_samples: int = 1000):
-    # parse configuration
-    config = parse_config(row["before_first_move"])
-    # find all legal moves
-    movs  = general.moveable_indices(config)
-    drops = general.possible_drop_locations(config)
-    all_moves = [(m,d) for m in movs for d in drops if m-d != 18]
+    # define which center to use
+    center_idx = pick_center(goal_type) if goal_type is not None else TRUE_CENTER
+    
+    # enumerate all legal moves
+    moveable = general.moveable_indices(config)
+    drop_locs = general.possible_drop_locations(config)
+    combs = [(m,d) for m in moveable for d in drop_locs if (m - d) != n_cols]
+    
+    if not combs:
+        return {"stepwise": np.nan, "euclidean": np.nan}
+    step_vals, euc_vals = [], []
+    for _ in range(n_samples):
+        m,d = random.choice(combs)
+        sal = compute_salience(f"({m},{d})", center_idx, n_cols)
+        step_vals.append(sal["stepwise_salience"])
+        euc_vals.append(sal["euclidean_salience"])
+    return {"stepwise": float(np.mean(step_vals)), "euclidean": float(np.mean(euc_vals))}
 
-    # if there are no legal moves, return NaNs for everything
-    if not all_moves:
-        return pd.Series({
-            "avg_rand_step":   np.nan,
-            "avg_rand_euc":    np.nan,
-            "diff_rand_step":  np.nan,
-            "diff_rand_euc":   np.nan,
-            "avg_serv_step":   np.nan,
-            "avg_serv_euc":    np.nan,
-            "diff_serv_step":  np.nan,
-            "diff_serv_euc":   np.nan,
-        })
-
-    # actual move salience
-    actual = compute_salience(row["first_move"])
-
-    # uniform-random baseline (safe now since all_moves non-empty)
-    samp = random.choices(all_moves, k=n_samples)
-    movs = general.moveable_indices(config)
-    drops = general.possible_drop_locations(config)
-    all_moves = [(m, d) for m in movs for d in drops if m - d != 18]
-
-    # uniform‐random baseline
-    samp = random.choices(all_moves, k=n_samples)
-    rand_steps = [ compute_salience(f"({m},{d})")["stepwise_salience"] for m,d in samp ]
-    rand_eucs = [ compute_salience(f"({m},{d})")["euclidean_salience"] for m,d in samp ]
-    avg_rand_s = np.mean(rand_steps)
-    avg_rand_e = np.mean(rand_eucs)
-
-    # goal‐serving moves only (utility == 1)
-    serve = [mv for mv in all_moves
-             if general.compute_move_utility(config, mv, row["goal"]) == 1]
-    if serve:
-        samp2 = random.choices(serve, k=n_samples)
-        serv_steps = [ compute_salience(f"({m},{d})")["stepwise_salience"] for m,d in samp2 ]
-        serv_eucs = [ compute_salience(f"({m},{d})")["euclidean_salience"] for m,d in samp2 ]
-        avg_serv_s = np.mean(serv_steps)
-        avg_serv_e = np.mean(serv_eucs)
-    else:
-        avg_serv_s = avg_serv_e = np.nan
-
-    return pd.Series({
-        "avg_rand_step": avg_rand_s,
-        "avg_rand_euc": avg_rand_e,
-        "diff_rand_step": actual["stepwise_salience"] - avg_rand_s,
-        "diff_rand_euc": actual["euclidean_salience"] - avg_rand_e,
-        "avg_serv_step": avg_serv_s,
-        "avg_serv_euc": avg_serv_e,
-        "diff_serv_step": actual["stepwise_salience"] - avg_serv_s,
-        "diff_serv_euc": actual["euclidean_salience"] - avg_serv_e,
-    })
-"""
+def add_baseline_columns(df: pd.DataFrame, n_samples=1000) -> pd.DataFrame:
+    b = df.apply(
+        lambda r: pd.Series(random_baseline_salience(r["config"], r["goal_type"], n_samples)),
+        axis=1
+    ).rename(columns={"stepwise":"random_stepwise_salience", "euclidean":"random_euclidean_salience"})
+    return pd.concat([df, b], axis=1)
 
 def main():
     files = [
-        ("data/e1/final_first_moves.csv", "E1"),
-        ("data/e2/first_moves.csv", "E2")
+        ("data/e1/final_first_moves.csv", None, "E1"),
+        ("data/e2/first_moves.csv", "data/e2/final_move_df.csv", "E2")
     ]
-    dfs = []
-    for path, label in files:
-        df = pd.read_csv(path)
-        # only E2 has a 'role' column to filter
-        if label == "E2" and "role" in df.columns:
-            df = df[df['role'] == 'architect']
-        df['experiment'] = label
-        df['goal_type']  = df['goal'].str.split().str[0]
-        df = add_salience_columns(df)
-        dfs.append(df)
+    all_dfs = []
+    for moves_path, config_path, label in files:
+        df_moves = pd.read_csv(moves_path)
+        # for E1, keep only architects
+        if label == "E1" and "role" in df_moves.columns:
+            df_moves = df_moves[df_moves['role'] == "architect"]
 
-    combined = pd.concat(dfs, ignore_index=True)
+        df_moves['experiment'] = label
+        df_moves['goal_type'] = df_moves['goal'].str.split().str[0]
+
+        if config_path:
+            # E2 branch: load & parse configs
+            df_config = pd.read_csv(config_path)
+            df_config['config'] = df_config['config'].apply(ast.literal_eval)
+
+            # merge on anonID so each row has its starting board
+            df = df_moves.merge(
+                df_config[['importId','config']],
+                on='importId',
+                how='left'
+            )
+            # observed salience
+            df = add_salience_columns(df)
+            # random-baseline salience
+            df = add_baseline_columns(df, n_samples=1000)
+
+        else:
+            # E1 branch: observed only
+            df = add_salience_columns(df_moves)
+            # pad the baseline columns with NaN for consistency
+            df['random_stepwise_salience'] = np.nan
+            df['random_euclidean_salience'] = np.nan
+
+        all_dfs.append(df)
+
+    combined = pd.concat(all_dfs, ignore_index=True)
+    combined.to_csv("./analysis/salience_first_moves.csv", index=False)
 
     summary = (
-        combined
-        .groupby(['goal_type', 'experiment'])[['stepwise_salience', 'euclidean_salience']]
+        combined.groupby(['goal_type', 'experiment'])[['stepwise_salience', 'euclidean_salience', 'random_stepwise_salience', 'random_euclidean_salience']]
         .agg(['mean', 'std', 'count'])
     )
     print(summary)
+
 
 if __name__ == "__main__":
     main()
