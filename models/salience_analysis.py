@@ -108,6 +108,9 @@ def main():
     all_dfs = []
     for moves_path, config_path, label in files:
         df_moves = pd.read_csv(moves_path)
+        
+        # print(f"{label} df_moves columns:", df_moves.columns.tolist())
+
         # for E1, keep only architects
         if label == "E1" and "role" in df_moves.columns:
             df_moves = df_moves[df_moves['role'] == "architect"]
@@ -118,14 +121,18 @@ def main():
         if config_path:
             # E2 branch: load & parse configs
             df_config = pd.read_csv(config_path)
-            df_config['config'] = df_config['config'].apply(ast.literal_eval)
+
+            # drop extra e2 rows so that importId is unique
+            df_config = df_config.drop_duplicates(subset='importId', keep='first')
 
             # merge on anonID so each row has its starting board
+            df_config['config'] = df_config['config'].apply(ast.literal_eval)
             df = df_moves.merge(
                 df_config[['importId','config']],
                 on='importId',
                 how='left'
             )
+
             # observed salience
             df = add_salience_columns(df)
             # random-baseline salience
@@ -134,6 +141,7 @@ def main():
         else:
             # E1 branch: observed only
             df = add_salience_columns(df_moves)
+
             # pad the baseline columns with NaN for consistency
             df['random_stepwise_salience'] = np.nan
             df['random_euclidean_salience'] = np.nan
@@ -141,12 +149,22 @@ def main():
         all_dfs.append(df)
 
     combined = pd.concat(all_dfs, ignore_index=True)
+    cols = [
+    'experiment',
+    'ID','anonID','importId',
+    'goal_type',
+    'first_move_serves_goal',
+    'stepwise_salience','euclidean_salience',
+    'random_stepwise_salience','random_euclidean_salience'
+]
+    combined = combined[cols]
     combined.to_csv("./analysis/salience_first_moves.csv", index=False)
 
     summary = (
         combined.groupby(['goal_type', 'experiment'])[['stepwise_salience', 'euclidean_salience', 'random_stepwise_salience', 'random_euclidean_salience']]
         .agg(['mean', 'std', 'count'])
     )
+    summary.to_csv("./analysis/salience_summary.csv", index=True)
     print(summary)
 
 
