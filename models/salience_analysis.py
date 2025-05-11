@@ -12,10 +12,31 @@ from utils import general
 TRUE_CENTER = 44
 GOAL_CENTER = 73 
 
+REGION_CENTER = {
+     "A1": 73,
+    "A2": 76,
+    "B1": 79,
+    "B2": 82,
+    "C1": 85,
+    "C2": 88,
+}
+
 # salience helper functions
 
 def pick_center(goal_type: str) -> int:
     return GOAL_CENTER if goal_type in ("cover", "uncover") else TRUE_CENTER
+
+def pick_observed_center(goal: str) -> int:
+    """
+    Given a goal like "move red C1" or "clear blue A2",
+    split off the region code and return its center.
+    Falls back to the old goal‐type logic if region isn't mapped.
+    """
+    region = goal.split()[-1]
+    if region in REGION_CENTER:
+        return REGION_CENTER[region]
+    # fallback to the original type‐based center
+    return GOAL_CENTER if goal.split()[0] in ("cover","uncover") else TRUE_CENTER
 
 def row_col(index: int, n_cols: int = 18) -> tuple[int,int]:
     # Convert a flat grid index into (row, col) on an n_cols-wide grid.
@@ -48,7 +69,7 @@ def add_salience_columns(df: pd.DataFrame) -> pd.DataFrame:
     sal = df.apply(
         lambda r: compute_salience(
             r['first_move'],
-            center_idx=pick_center(r['goal_type'])
+            center_idx=pick_observed_center(r['goal'])
         ),
         axis=1
     )
@@ -102,14 +123,12 @@ def add_baseline_columns(df: pd.DataFrame, n_samples=1000) -> pd.DataFrame:
 
 def main():
     files = [
-        ("data/e1/final_first_moves.csv", None, "E1"),
+        ("data/e1/final_first_moves.csv", "data/e1/final_move_df.csv", "E1"),
         ("data/e2/first_moves.csv", "data/e2/final_move_df.csv", "E2")
     ]
     all_dfs = []
     for moves_path, config_path, label in files:
         df_moves = pd.read_csv(moves_path)
-        
-        # print(f"{label} df_moves columns:", df_moves.columns.tolist())
 
         # for E1, keep only architects
         if label == "E1" and "role" in df_moves.columns:
@@ -118,33 +137,23 @@ def main():
         df_moves['experiment'] = label
         df_moves['goal_type'] = df_moves['goal'].str.split().str[0]
 
-        if config_path:
-            # E2 branch: load & parse configs
-            df_config = pd.read_csv(config_path)
+        if label == "E1": 
+            df_moves['importId'] = df_moves['ID']
 
-            # drop extra e2 rows so that importId is unique
-            df_config = df_config.drop_duplicates(subset='importId', keep='first')
+        df_config = pd.read_csv(config_path)
+        if 'importId' not in df_config.columns and 'ID' in df_config.columns:
+            df_config.rename(columns={'ID':'importId'}, inplace=True)
+        df_config = df_config.drop_duplicates(subset='importId', keep='first')
+        df_config['config'] = df_config['config'].apply(ast.literal_eval)
 
-            # merge on anonID so each row has its starting board
-            df_config['config'] = df_config['config'].apply(ast.literal_eval)
-            df = df_moves.merge(
-                df_config[['importId','config']],
-                on='importId',
-                how='left'
-            )
-
-            # observed salience
-            df = add_salience_columns(df)
-            # random-baseline salience
-            df = add_baseline_columns(df, n_samples=1000)
-
-        else:
-            # E1 branch: observed only
-            df = add_salience_columns(df_moves)
-
-            # pad the baseline columns with NaN for consistency
-            df['random_stepwise_salience'] = np.nan
-            df['random_euclidean_salience'] = np.nan
+        # merge and compute both observed + random baselines
+        df = df_moves.merge(
+            df_config[['importId','config']],
+            on='importId',
+            how='left'
+        )
+        df = add_salience_columns(df)
+        df = add_baseline_columns(df, n_samples=1000)
 
         all_dfs.append(df)
 
