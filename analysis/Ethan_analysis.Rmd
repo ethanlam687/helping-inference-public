@@ -178,6 +178,7 @@ ggplot(helper_arch_comb, aes(x = helper_class, y = first_move_rank, fill = helpe
   stat_summary(fun = mean, geom = "bar", position = position_dodge(.8), width = .7) +
   stat_summary(fun.data = mean_se, geom = "errorbar", position = position_dodge(.8), width = .2) +
   labs(
+    title = "First Move Rank compared to Helper Move Utility",
     x = "Helper Move Classification",
     y = "Mean Architect First-Move Rank"
   ) +
@@ -385,7 +386,7 @@ ggplot(long_sal,
        y     = "Mean Salience",
        fill  = "Source",
        title = "Observed vs Baseline Salience by Goal Type") +
-  scale_fill_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set3") +
   theme_minimal()
 
 ```
