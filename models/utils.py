@@ -3,7 +3,7 @@ from scipy.special import softmax
 import pandas as pd
 import itertools
 import warnings
-warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
+#warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 np.set_printoptions(suppress=True)
 import numpy as np
 from ast import literal_eval

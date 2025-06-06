@@ -161,6 +161,7 @@ def main():
     cols = [
     'experiment',
     'ID','anonID','importId',
+    'goal',
     'goal_type',
     'first_move_serves_goal',
     'stepwise_salience','euclidean_salience',

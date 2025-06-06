@@ -154,6 +154,8 @@ class data_processing:
 
         return final_individual_move_tracker
     
+## UNDERSTAND THIS CODE 
+
     def first_architect_move(moveID_df):
         goalspace = general.define_goalspace()
         first_move_rank_df = pd.DataFrame()
@@ -179,6 +181,8 @@ class data_processing:
                 
             # now find all possible moves and what their utility is
             u = general.generate_utility_matrix(config, goalspace)
+
+            ## UNDERSTAND UP TO HERE: WHAT IS STRUCTURE OF CONFIG, GOALSPACE, U? 
 
             move_df = pd.DataFrame()
             
