@@ -18,8 +18,8 @@ library(broom)
 library(rstatix)
 library(ggpubr)
 library(car)
-
-```
+library(stringr)
+``` 
 
 # Import data
 
@@ -247,7 +247,6 @@ e2_prag <- combined_first_moves %>%
 
 paired_prag <- e2_prag %>%
   inner_join(e1_prag, by = c("importId" = "ID", "goal", "goal_type")) %>%
-  view()
 
 ```
 ## E1-E2 Unpaired t-test for Pragmatism
@@ -568,11 +567,56 @@ ggplot(long_sal,
 
 ```{r}
 
+e1_move_list <- e1 %>%
+  mutate(arch_move_from = as.numeric(str_extract(move, "(?<=\\().+?(?=,)")),
+         helper_move_to = as.numeric(str_extract(move, "(?<=, ).+?(?=\\))"))) 
 
+corrections <- e1_move_list %>%
+  arrange(ID, goal, move_id) %>%
+  group_by(ID, goal) %>%
+  mutate(
+    next_move_role = lead(role),
+    arch_pickup = lead(arch_move_from),
+    arch_move_utility = lead(move_utility)) %>%
+  ungroup() %>%
+  filter(role == "helper", next_move_role == "architect", helper_move_to == arch_pickup) %>%
+  select(ID, goal, goal_type, move_id, helper_move_to, arch_pickup, helper_move_utility = move_utility, arch_move_utility)
+
+print(corrections)
 
 
 ```
 
+### Visualization of Corrections by Goal Type
+
+```{r}
+
+# count of corrections by goal type
+
+corrections %>%
+  count(goal_type) %>%
+  ggplot(aes(x = goal_type, y = n, fill = goal_type)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Count of Corrections by Goal Type", x = "Goal Type", y = "Number of Corrections") +
+    scale_fill_brewer(palette = "Set2") +
+    theme_minimal()
+
+# utility of helper move preceding correction
+
+corrections %>%
+  count(goal_type, helper_move_utility) %>%
+  ggplot(aes(x = as.factor(helper_move_utility), y = n, fill = as.factor(helper_move_utility))) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ goal_type) +
+  labs(
+    title = "Corrections by Helper Utility and Goal Type",
+    x = "Helper Move Utility",
+    y = "Number of Corrections") +
+  scale_fill_brewer(palette = "Set2", guide = "none") +
+  theme_minimal()
+    
+
+```
 
 
 
