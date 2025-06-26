@@ -30,4 +30,4 @@ def generate_salience_matrix(configArray, goalspace, salience_metric = "euclidea
             s = compute_salience(move, center)
             salience_matrix[j, i] = s[f"{salience_metric}_salience"]
 
-    return salience_matrix
+    return salience_matrix, combs
