@@ -259,11 +259,47 @@ class optimize:
                         currentConfig = general.update_config(currentConfig, "none", "none")
                     else:
                         currentConfig = general.update_config(currentConfig, move[0], move[1]) 
-                
-                    
-
         #print(f"beta = {beta}, nll=", nll)
         return nll
+    
+    def compute_ll_sal_prag_architect(alpha, currentConfig, ID_df):
+        '''
+        this function finds the optimal alpha parameter for the salience-pragmatic combined architect model
+        '''
+        initial_config = currentConfig.copy()
+        goalspace = general.define_goalspace()
+        nll = 0
+
+        for index, row in ID_df.iterrows():
+            goal = row["goal"]
+            moveIDs = row["moveIDs"]
+
+            goal_np_initial = general.get_initial_goal_probs(goalspace)
+            goal_np = goal_np_initial.copy()
+            currentConfig = initial_config.copy()
+
+            for i in range(0, len(moveIDs)):
+                move = moveIDs[i]
+
+                if i % 2 == 0:
+                    # architect move
+                    move_probs, c = architect.sal_prag_architect_trial(configArray=currentConfig, goal=goal, goal_probs=goal_np, goalspace=goalspace, alpha=alpha[0])  # fmin expects an array-like input
+                    prob = move_probs[c.index(move)]
+                    nll += -np.log(prob)
+                else:
+                    # helper move
+                    prev_move = moveIDs[i-1]
+                    goal_np = helper.probabilistic_goal_inference(
+                        currentConfig, prev_move, goal_np, goalspace, goal_noise=0.5)  # default, or tweak if needed
+
+                    currentConfig = general.update_config(currentConfig, prev_move[0], prev_move[1])
+                    if move == "pass":
+                        currentConfig = general.update_config(currentConfig, "none", "none")
+                    else:
+                        currentConfig = general.update_config(currentConfig, move[0], move[1])
+
+        return nll
+
     
     def compute_firstmove_literal_LL(beta, currentConfig, ID_df):
         '''
@@ -531,6 +567,30 @@ class optimize:
 
                 # write to csv
                 architect_optimized.to_csv('opt_results/arch_lit_opt.csv', index=False)
+
+    def optimize_sal_prag_architect(moveID_df):
+        '''
+        fits the alpha parameter for the salience-pragmatic combined architect model
+        '''
+        architect_optimized = pd.DataFrame()
+        IDs = moveID_df.ID.unique().tolist()
+        print("IDs=", IDs)
+
+        for ID in IDs:
+            print(f"optimizing architect (salience+pragmatic) for ID {ID}")
+            ID_df = moveID_df.loc[moveID_df['ID'] == ID]
+            config = list(ID_df["config"])[0]
+
+            alpha_initial = [np.random.rand()]  # scalar alpha between 0 and 1
+
+            alpha_opt = fmin(optimize.compute_ll_sal_prag_architect, alpha_initial, args=(config, ID_df), ftol = 0.001, full_output=True, disp=False)
+            alpha_df = pd.DataFrame({'ID': [ID], 'alpha': alpha_opt[0][0]})
+
+            architect_optimized = pd.concat([architect_optimized, alpha_df])
+
+            # write to csv----not sure about location?
+            architect_optimized.to_csv('opt_results/arch_salprag_opt.csv', index=False)
+
 
     
 
