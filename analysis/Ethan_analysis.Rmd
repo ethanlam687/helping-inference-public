@@ -1,7 +1,9 @@
 ---
 title: "E1 and E2 Data Analysis"
-output: html_notebook
-editor_options: 
+output:
+  html_document:
+    df_print: paged
+editor_options:
   chunk_output_type: inline
 ---
 
@@ -246,7 +248,7 @@ e2_prag <- combined_first_moves %>%
   select(importId, anonID, goal, goal_type, first_move_rank_e2 = first_move_rank)
 
 paired_prag <- e2_prag %>%
-  inner_join(e1_prag, by = c("importId" = "ID", "goal", "goal_type")) %>%
+  inner_join(e1_prag, by = c("importId" = "ID", "goal", "goal_type"))
 
 ```
 ## E1-E2 Unpaired t-test for Pragmatism
@@ -339,7 +341,7 @@ e2_saliences <- combined_saliences %>%
   select(importId, anonID, goal, goal_type, stepwise_salience_e2 = stepwise_salience, euclidean_salience_e2 = euclidean_salience)
 
 paired_salience <- e2_saliences %>%
-  inner_join(e1_saliences, by = c("importId" = "ID", "goal", "goal_type")) %>%
+  inner_join(e1_saliences, by = c("importId" = "ID", "goal", "goal_type"))
 
 ```
 
@@ -593,11 +595,14 @@ corrections_per_game <- corrections %>%
   summarise(num_corrections = n(), .groups = "drop")
 print(corrections_per_game)
 
-# average corrections per game by goal_type
-corrections_per_game %>%
-  group_by(goal_type) %>%
-  summarise(avg_corrections_per_game = mean(num_corrections), n_games = n()) %>%
-  print()
+# average corrections per game by move_type and goal_type
+corrections_per_game_by_type <- corrections %>%
+  group_by(ID, goal, goal_type, helper_move_utility = move_utility) %>%
+  summarise(num_corrections = n(), .groups = "drop") %>%
+  group_by(goal_type, helper_move_utility) %>%
+  summarise(avg_corrections_per_game = mean(num_corrections), n_games = n(), .groups = "drop")
+
+print(corrections_per_game_by_type)
 
 # proportion of corrections by move type and goal type
 proportion_corrections <- e1_move_list %>%
@@ -623,15 +628,19 @@ print(proportion_corrections)
 ```{r}
 
 # count of corrections by goal type
-
-corrections %>%
-  count(goal_type) %>%
-  ggplot(aes(x = goal_type, y = n, fill = goal_type)) +
-    geom_bar(stat = "identity") +
-    labs(title = "Count of Corrections by Goal Type", x = "Goal Type", y = "Number of Corrections") +
-    scale_fill_brewer(palette = "Set2") +
-    theme_minimal()
-
+ggplot(corrections_per_game_by_type, 
+       aes(x = as.factor(helper_move_utility), 
+           y = avg_corrections_per_game, 
+           fill = as.factor(helper_move_utility))) +
+  geom_bar(stat = "identity", position = position_dodge(.8), width = .7) +
+  facet_wrap(~ goal_type) +
+  labs(
+    title = "Average Corrections per Game by Move Type and Goal Type",
+    x = "Helper Move Utility",
+    y = "Avg. Corrections per Game"
+  ) +
+  scale_fill_brewer(palette = "Set2", guide = "none") +
+  theme_minimal()
 # proportion of corrections by helper move utility and goal type
 ggplot(proportion_corrections, aes(x = factor(helper_move_utility), y = prop_correction, fill = factor(helper_move_utility))) +
   geom_bar(stat = "identity", position = position_dodge(.8), width = .7) +
