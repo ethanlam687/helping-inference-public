@@ -571,18 +571,49 @@ e1_move_list <- e1 %>%
   mutate(arch_move_from = as.numeric(str_extract(move, "(?<=\\().+?(?=,)")),
          helper_move_to = as.numeric(str_extract(move, "(?<=, ).+?(?=\\))"))) 
 
-corrections <- e1_move_list %>%
+e1_move_list <- e1_move_list %>%
   arrange(ID, goal, move_id) %>%
   group_by(ID, goal) %>%
   mutate(
     next_move_role = lead(role),
     arch_pickup = lead(arch_move_from),
-    arch_move_utility = lead(move_utility)) %>%
-  ungroup() %>%
-  filter(role == "helper", next_move_role == "architect", helper_move_to == arch_pickup) %>%
-  select(ID, goal, goal_type, move_id, helper_move_to, arch_pickup, helper_move_utility = move_utility, arch_move_utility)
+    arch_move_utility = lead(move_utility),
+    is_correction = (role == "helper") & (next_move_role == "architect") & (helper_move_to == arch_pickup)
+  ) %>%
+  ungroup()
 
+# Then corrections is just:
+corrections <- e1_move_list %>%
+  filter(is_correction)
 print(corrections)
+
+# corrections per game
+corrections_per_game <- corrections %>%
+  group_by(ID, goal, goal_type) %>%
+  summarise(num_corrections = n(), .groups = "drop")
+print(corrections_per_game)
+
+# average corrections per game by goal_type
+corrections_per_game %>%
+  group_by(goal_type) %>%
+  summarise(avg_corrections_per_game = mean(num_corrections), n_games = n()) %>%
+  print()
+
+# proportion of corrections by move type and goal type
+proportion_corrections <- e1_move_list %>%
+  group_by(goal_type, helper_move_utility = move_utility) %>%
+  summarise(
+    total_helper_moves = n(),
+    corrections = sum(is_correction, na.rm = TRUE),
+    prop_correction = corrections / total_helper_moves,
+    .groups = "drop"
+  )
+
+print(proportion_corrections)
+
+
+
+
 
 
 ```
@@ -601,20 +632,13 @@ corrections %>%
     scale_fill_brewer(palette = "Set2") +
     theme_minimal()
 
-# utility of helper move preceding correction
-
-corrections %>%
-  count(goal_type, helper_move_utility) %>%
-  ggplot(aes(x = as.factor(helper_move_utility), y = n, fill = as.factor(helper_move_utility))) +
-  geom_bar(stat = "identity") +
+# proportion of corrections by helper move utility and goal type
+ggplot(proportion_corrections, aes(x = factor(helper_move_utility), y = prop_correction, fill = factor(helper_move_utility))) +
+  geom_bar(stat = "identity", position = position_dodge(.8), width = .7) +
   facet_wrap(~ goal_type) +
-  labs(
-    title = "Corrections by Helper Utility and Goal Type",
-    x = "Helper Move Utility",
-    y = "Number of Corrections") +
-  scale_fill_brewer(palette = "Set2", guide = "none") +
-  theme_minimal()
-    
+  labs(title = "Proportion of Corrections by Move Utility and Goal Type", x = "Helper Move Utility", y = "Proportion Corrected") +
+  scale_fill_brewer(palette = "Set2", name = "Move Utility") +
+  theme_minimal()  
 
 ```
 
