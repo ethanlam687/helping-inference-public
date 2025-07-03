@@ -274,6 +274,9 @@ class optimize:
             goal = row["goal"]
             moveIDs = row["moveIDs"]
 
+            print(f"Evaluating goal: {goal} | alpha: {alpha[0]} | move count: {len(moveIDs)}")
+
+
             goal_np_initial = general.get_initial_goal_probs(goalspace)
             goal_np = goal_np_initial.copy()
             currentConfig = initial_config.copy()
@@ -283,20 +286,21 @@ class optimize:
 
                 if i % 2 == 0:
                     # architect move
-                    move_probs, c = architect.sal_prag_architect_trial(configArray=currentConfig, goal=goal, goal_probs=goal_np, goalspace=goalspace, alpha=alpha[0])  # fmin expects an array-like input
+                    move_probs, c = architect.sal_prag_architect_trial(configArray=currentConfig, goal=goal, goal_probs_history=goal_np, goalspace=goalspace, goal_noise=1.0, action_noise=1.0,alpha=alpha[0])  # fmin expects an array-like input
                     prob = move_probs[c.index(move)]
                     nll += -np.log(prob)
                 else:
                     # helper move
                     prev_move = moveIDs[i-1]
                     goal_np = helper.probabilistic_goal_inference(
-                        currentConfig, prev_move, goal_np, goalspace, goal_noise=0.5)  # default, or tweak if needed
+                        currentConfig, prev_move, goal_np, goalspace, goal_noise=0.5)  
 
                     currentConfig = general.update_config(currentConfig, prev_move[0], prev_move[1])
                     if move == "pass":
                         currentConfig = general.update_config(currentConfig, "none", "none")
                     else:
                         currentConfig = general.update_config(currentConfig, move[0], move[1])
+
 
         return nll
 
@@ -550,6 +554,9 @@ class optimize:
         #architect_optimized = pd.DataFrame()
         IDs = moveID_df.ID.unique().tolist()
         #print("IDs=", IDs)
+
+
+        ### DO IT FOR ONLY 2 GAMES ( BY GOAL TYPES)
         for ID in IDs:
             if(ID in opt_IDs):
                 print(f"{ID} already optimized")
@@ -589,7 +596,7 @@ class optimize:
             architect_optimized = pd.concat([architect_optimized, alpha_df])
 
             # write to csv----not sure about location?
-            architect_optimized.to_csv('opt_results/arch_salprag_opt.csv', index=False)
+            architect_optimized.to_csv('arch_salprag_opt.csv', index=False)
 
 
     

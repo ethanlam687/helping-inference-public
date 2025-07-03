@@ -441,6 +441,12 @@ ggplot(
 # observed-baseline differences
 combined_saliences <- combined_saliences %>%
   mutate(
+    stepwise_salience = as.numeric(stepwise_salience),
+    euclidean_salience = as.numeric(euclidean_salience),
+    random_stepwise_salience = as.numeric(random_stepwise_salience),
+    random_euclidean_salience = as.numeric(random_euclidean_salience)
+  ) %>%
+  mutate(
     diff_stepwise = stepwise_salience - random_stepwise_salience,
     diff_euclidean = euclidean_salience - random_euclidean_salience
   )
@@ -584,16 +590,14 @@ e1_move_list <- e1_move_list %>%
   ) %>%
   ungroup()
 
-# Then corrections is just:
 corrections <- e1_move_list %>%
   filter(is_correction)
-print(corrections)
+
 
 # corrections per game
 corrections_per_game <- corrections %>%
   group_by(ID, goal, goal_type) %>%
   summarise(num_corrections = n(), .groups = "drop")
-print(corrections_per_game)
 
 # average corrections per game by move_type and goal_type
 corrections_per_game_by_type <- corrections %>%
@@ -604,20 +608,12 @@ corrections_per_game_by_type <- corrections %>%
 
 print(corrections_per_game_by_type)
 
-# proportion of corrections by move type and goal type
-proportion_corrections <- e1_move_list %>%
-  group_by(goal_type, helper_move_utility = move_utility) %>%
-  summarise(
-    total_helper_moves = n(),
-    corrections = sum(is_correction, na.rm = TRUE),
-    prop_correction = corrections / total_helper_moves,
-    .groups = "drop"
-  )
-
-print(proportion_corrections)
-
-
-
+correction_prop <- corrections %>%
+  count(goal_type, helper_move_utility = move_utility) %>%
+  group_by(goal_type) %>%
+  mutate(total_corrections = sum(n), proportion = n / total_corrections) %>%
+  ungroup()
+print(correction_prop)
 
 
 
@@ -626,6 +622,15 @@ print(proportion_corrections)
 ### Visualization of Corrections by Goal Type
 
 ```{r}
+# visualization by propotion
+ggplot(correction_prop, aes(x = goal_type, y = proportion, fill = as.factor(helper_move_utility))) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = scales::percent(proportion, accuracy = 1)),
+              position = position_stack(vjust = 0.5), size = 3) +
+    labs(
+      title = "Correction Proportion by Move Utility and Goal Type", x = "Goal Type", y = "Correction Prop", fill = "Helper Move Utility") +
+    scale_fill_brewer(palette = "Set2") +
+    theme_minimal()
 
 # count of corrections by goal type
 ggplot(corrections_per_game_by_type, 
@@ -634,20 +639,10 @@ ggplot(corrections_per_game_by_type,
            fill = as.factor(helper_move_utility))) +
   geom_bar(stat = "identity", position = position_dodge(.8), width = .7) +
   facet_wrap(~ goal_type) +
-  labs(
-    title = "Average Corrections per Game by Move Type and Goal Type",
-    x = "Helper Move Utility",
-    y = "Avg. Corrections per Game"
-  ) +
+  labs(title = "Average Corrections per Game by Move Type and Goal Type", x = "Helper Move Utility", y = "Avg. Corrections per Game") +
   scale_fill_brewer(palette = "Set2", guide = "none") +
   theme_minimal()
-# proportion of corrections by helper move utility and goal type
-ggplot(proportion_corrections, aes(x = factor(helper_move_utility), y = prop_correction, fill = factor(helper_move_utility))) +
-  geom_bar(stat = "identity", position = position_dodge(.8), width = .7) +
-  facet_wrap(~ goal_type) +
-  labs(title = "Proportion of Corrections by Move Utility and Goal Type", x = "Helper Move Utility", y = "Proportion Corrected") +
-  scale_fill_brewer(palette = "Set2", name = "Move Utility") +
-  theme_minimal()  
+
 
 ```
 
