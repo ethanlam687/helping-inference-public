@@ -28,6 +28,6 @@ def generate_salience_matrix(configArray, goalspace, salience_metric = "euclidea
         for j, move in enumerate(combs):
             # compute the salience for move pick-up index and fills in the salience value for the [j, i] cell
             s = compute_salience(move, center)
-            salience_matrix[j, i] = s[f"{salience_metric}_salience"]
+            salience_matrix[j, i] = float(s[f"{salience_metric}_salience"])
 
     return salience_matrix, combs

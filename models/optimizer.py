@@ -262,10 +262,11 @@ class optimize:
         #print(f"beta = {beta}, nll=", nll)
         return nll
     
-    def compute_ll_sal_prag_architect(alpha, currentConfig, ID_df):
+    def compute_ll_sal_prag_architect(params, currentConfig, ID_df):
         '''
         this function finds the optimal alpha parameter for the salience-pragmatic combined architect model
         '''
+        alpha, beta = params
         initial_config = currentConfig.copy()
         goalspace = general.define_goalspace()
         nll = 0
@@ -276,7 +277,6 @@ class optimize:
 
             print(f"Evaluating goal: {goal} | alpha: {alpha[0]} | move count: {len(moveIDs)}")
 
-
             goal_np_initial = general.get_initial_goal_probs(goalspace)
             goal_np = goal_np_initial.copy()
             currentConfig = initial_config.copy()
@@ -286,7 +286,7 @@ class optimize:
 
                 if i % 2 == 0:
                     # architect move
-                    move_probs, c = architect.sal_prag_architect_trial(configArray=currentConfig, goal=goal, goal_probs_history=goal_np, goalspace=goalspace, goal_noise=1.0, action_noise=1.0,alpha=alpha[0])  # fmin expects an array-like input
+                    move_probs, c = architect.v2_sal_prag_architect_trial(configArray=currentConfig, goal=goal, goal_probs_history=goal_np, goalspace=goalspace, goal_noise=1.0, action_noise=1.0,alpha=alpha, beta=beta, salience_metric="euclidean")
                     prob = move_probs[c.index(move)]
                     nll += -np.log(prob)
                 else:
@@ -519,7 +519,7 @@ class optimize:
             # write to csv
             architect_optimized.to_csv('opt_results/arch_first_lit_useful.csv', index=False)
         
-
+    # updated to optimize at level of ID AND goal type
     def optimize_pragmatic_architect(moveID_df):
         '''
         moveID_df contains 10 rows per participant for the 10  goals they completed
@@ -530,20 +530,29 @@ class optimize:
         IDs = moveID_df.ID.unique().tolist()
         print("IDs=", IDs)
         for ID in IDs:
-            print(f"optimizing architect for ID {ID}")
             ID_df = moveID_df.loc[moveID_df['ID'] == ID]
-            config = list(ID_df["config"])[0]
+            goal_types = ID_df["goal_type"].unique()
             
-            beta_initial = [np.random.rand(), np.random.rand()]
-        
-            beta_opt = fmin(optimize.compute_ll_pragmatic_architect, beta_initial, args=(config, ID_df), ftol = 0.001, full_output=True, disp=False)
-            beta_df = pd.DataFrame({'ID': [ID], 'goal_noise': beta_opt[0][0], 'action_noise':beta_opt[0][1]})
-            
-            architect_optimized = pd.concat([architect_optimized, beta_df])
+            for goal_type in goal_types:
+                subset_df = ID_df[ID_df["goal_type"] == goal_type]
+                if subset_df.empty:
+                    continue
 
-            # write to csv
-            architect_optimized.to_csv('opt_results/arch_prag_goal_opt.csv', index=False)
+                print(f"optimizing pragmatic architect for ID {ID} and goal type {goal_type}")
+
+                config = list(subset_df["config"])[0]
+
+                beta_initial = [np.random.rand(), np.random.rand()]
+            
+                beta_opt = fmin(optimize.compute_ll_pragmatic_architect, beta_initial, args=(config, subset_df), ftol = 0.001, full_output=True, disp=False)
+                beta_df = pd.DataFrame({'ID': [ID], 'goal_type': [goal_type], 'goal_noise': beta_opt[0][0], 'action_noise':beta_opt[0][1]})
+                
+                architect_optimized = pd.concat([architect_optimized, beta_df], ignore_index=True)
+
+        # write to csv
+        architect_optimized.to_csv('arch_prag_goal_opt.csv', index=False)
     
+    # updated to optimize at level of ID AND goal type
     def optimize_literal_architect(moveID_df):
         '''
         moveID_df contains 10 rows per participant for the 10  goals they completed
@@ -555,29 +564,35 @@ class optimize:
         IDs = moveID_df.ID.unique().tolist()
         #print("IDs=", IDs)
 
-
-        ### DO IT FOR ONLY 2 GAMES ( BY GOAL TYPES)
         for ID in IDs:
             if(ID in opt_IDs):
                 print(f"{ID} already optimized")
             else:
                 print(f"optimizing architect for ID {ID}")
                 ID_df = moveID_df.loc[moveID_df['ID'] == ID]
-                config = list(ID_df["config"])[0]
+                goal_types = ID_df["goal_type"].unique()
+
+                for goal_type in goal_types:
+                    subset_df = ID_df[ID_df["goal_type"] == goal_type]
+                    if subset_df.empty:
+                        continue
+
+                    print(f"optimizing literal architect for ID {ID} and goal type {goal_type}")
+                    
+                    config = list(subset_df["config"])[0]
+                    beta_initial = [np.random.rand()]
                 
-                beta_initial = [np.random.rand()]
-            
-                beta_opt = fmin(optimize.compute_ll_literal_architect, beta_initial, args=(config, ID_df), ftol = 0.001, full_output=True, disp=False)
-                beta_df = pd.DataFrame({'ID': [ID], 'action_noise':beta_opt[0][0]})
-                
-                architect_optimized = pd.concat([architect_optimized, beta_df])
+                    beta_opt = fmin(optimize.compute_ll_literal_architect, beta_initial, args=(config, subset_df), ftol = 0.001, full_output=True, disp=False)
+                    beta_df = pd.DataFrame({'ID': [ID], 'goal_type': [goal_type], 'action_noise':beta_opt[0][0]})
+                    
+                    architect_optimized = pd.concat([architect_optimized, beta_df], ignore_index=True)
 
                 # write to csv
-                architect_optimized.to_csv('opt_results/arch_lit_opt.csv', index=False)
+                architect_optimized.to_csv('arch_lit_opt.csv', index=False)
 
     def optimize_sal_prag_architect(moveID_df):
         '''
-        fits the alpha parameter for the salience-pragmatic combined architect model
+        fits the alpha and beta parameter for the salience-pragmatic combined architect model
         '''
         architect_optimized = pd.DataFrame()
         IDs = moveID_df.ID.unique().tolist()
@@ -588,14 +603,16 @@ class optimize:
             ID_df = moveID_df.loc[moveID_df['ID'] == ID]
             config = list(ID_df["config"])[0]
 
-            alpha_initial = [np.random.rand()]  # scalar alpha between 0 and 1
+            param_initial = [np.random.rand(), np.random.rand()] 
 
-            alpha_opt = fmin(optimize.compute_ll_sal_prag_architect, alpha_initial, args=(config, ID_df), ftol = 0.001, full_output=True, disp=False)
-            alpha_df = pd.DataFrame({'ID': [ID], 'alpha': alpha_opt[0][0]})
+            
+            param_opt = fmin(optimize.compute_ll_sal_prag_architect, param_initial, args=(config, ID_df), ftol = 0.001, full_output=True, disp=False)
+            alpha_opt, beta_opt = param_opt[0]
+            result_df = pd.DataFrame({'ID': [ID], 'alpha': [alpha_opt], 'beta': [beta_opt]})
 
-            architect_optimized = pd.concat([architect_optimized, alpha_df])
+            architect_optimized = pd.concat([architect_optimized, result_df], ignore_index=True)
 
-            # write to csv----not sure about location?
+            # write to csv
             architect_optimized.to_csv('arch_salprag_opt.csv', index=False)
 
 

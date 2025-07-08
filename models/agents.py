@@ -18,13 +18,9 @@ from generate_salience_matrix import generate_salience_matrix
 class architect:
 
   def literal_architect_probs(configArray, literalA_beta, goalspace):
-      print("LITERAL ARCHITECT:")
       # gets utility matrix and computes softmax probabilities under all goals
       utility_matrix, combs = general.generate_utility_matrix(configArray, goalspace)
-      print("utility_matrix:", utility_matrix)
-      print("combs:", combs)
       soft_optimal_moves = softmax(literalA_beta*utility_matrix, axis = 0)
-      print("soft_optimal_moves:", soft_optimal_moves)
       #soft_optimal_moves = general.softmax_t(utility_matrix, literalA_beta)
       return utility_matrix, soft_optimal_moves, combs
   
@@ -32,22 +28,14 @@ class architect:
     u, s, c = architect.literal_architect_probs(configArray, literalA_beta, goalspace)
     # select probs for specific goal only
     goal_index = goalspace.index(goal)
-    print("move probabilities for goal", goal, ":", s[:,goal_index])
     move_probs = s[:,goal_index]
-    print("move probabilities for specific goal:", move_probs)
     return move_probs, c
   
   def pragmatic_architect_probs(configArray, goal_probs_history, goal_noise, goalspace, action_noise):
-    print("PRAGMATIC ARCHITECT:")
     # computes goal matrix for each possible move
     gp, u, s, c = generic_agent.create_goal_matrix(configArray, goal_probs_history, noise_value = goal_noise ,goalspace = goalspace)
-    print("goal probabilities for each move:", gp)
-    print("utility matrix:", u)
-    print("move labels:", c)
-    print("softmax probabilities:", s)
     # once we get the goal probabilities for each possible move, we want to extract probabilities of true goal here and softmax over all moves
     new_s = general.softmax_t(gp, action_noise)
-    print("new softmax probabilities:", new_s)
     return u, new_s, c
   
   def pragmatic_architect_trial(configArray, goal, goal_probs_history, goal_noise, action_noise):
@@ -55,9 +43,7 @@ class architect:
     u, new_s, c = architect.pragmatic_architect_probs(configArray, goal_probs_history, goal_noise, goalspace, action_noise)
     # select probs for specific goal only
     goal_index = goalspace.index(goal)
-    print("pragmatic move probabilities for goal", goal, ":", new_s[:,goal_index])
     move_probs = new_s[:,goal_index]
-    print("pragmatic move probabilities for specific goal:", move_probs)
     return move_probs, c
   
 
@@ -72,15 +58,39 @@ class architect:
     # softmax negative salience matrix to convert distances to probabilities --- lower salience = higher probability
     salience_probs = softmax(-salientA_beta * salience_matrix, axis=0)
     # weighted average of salience and pragmatic probabilities
-    combined_probs = alpha * salience_probs + (1 - alpha) * pragmatic_probs
+    combined = alpha * salience_probs + (1 - alpha) * pragmatic_probs
+    combined_probs = softmax(combined, axis=0)
     return combined_probs, salience_probs, c
   
+  # new function with power formula
+  def v2_sal_prag_architect_probs(configArray, goal_probs_history, goalspace, goal_noise, action_noise, alpha=0.5, beta=0.5, salientA_beta=1.0, salience_metric="euclidean"):
+    # get pramatic probabilities matrix
+    u, pragmatic_probs, c = architect.pragmatic_architect_probs(configArray, goal_probs_history, goal_noise, goalspace, action_noise)
+    # get salience matrix
+    salience_matrix, move_labels_sal  = generate_salience_matrix(configArray = configArray, goalspace = goalspace, salience_metric = salience_metric)
+    # sanity check
+    assert c == move_labels_sal, "move label mismatch between salience and utility matrices"
+    # softmax negative salience matrix to convert distances to probabilities --- lower salience = higher probability
+    salience_probs = softmax(-salientA_beta * salience_matrix, axis=0)
+    # weighted average of salience and pragmatic probabilities
+    combined = (salience_probs ** alpha) * (pragmatic_probs ** beta)
+    combined_probs = softmax(combined, axis=0)
+    return combined_probs, salience_probs, c
+
   def sal_prag_architect_trial(configArray, goal, goal_probs_history, goalspace, goal_noise, action_noise, alpha=0.5, salientA_beta=1.0, salience_metric="euclidean"):
     combined_probs, salience_probs, c = architect.sal_prag_architect_probs(configArray, goal_probs_history, goalspace, goal_noise, action_noise, alpha, salientA_beta, salience_metric)
     # select probs for specific goal only
     goal_index = goalspace.index(goal)
     move_probs = combined_probs[:,goal_index]
     return move_probs, c
+  
+  def v2_sal_prag_architect_trial(configArray, goal, goal_probs_history, goalspace, goal_noise, action_noise, alpha=0.5, beta=0.5, salientA_beta=1.0, salience_metric="euclidean"):
+    combined_probs, salience_probs, c = architect.v2_sal_prag_architect_probs(configArray, goal_probs_history, goalspace, goal_noise, action_noise, alpha, beta, salientA_beta, salience_metric)
+    # select probs for specific goal only
+    goal_index = goalspace.index(goal)
+    move_probs = combined_probs[:,goal_index]
+    return move_probs, c
+
 
 
 
@@ -125,7 +135,7 @@ class helper:
     '''
 
     if len(a_move) > 0:
-          goal_np_overall, u, s, c = helper.create_goal_matrix(configArray, goal_probs_history, noise_value =goal_noise,  goalspace = goalspace)
+          goal_np_overall, u, s, c = generic_agent.create_goal_matrix(configArray, goal_probs_history, noise_value =goal_noise,  goalspace = goalspace)
           goal_np = goal_np_overall[c.index(a_move)]
     else:
         goal_np = goal_probs_history

@@ -23,6 +23,7 @@ REGION_CENTER = {
 
 # salience helper functions
 
+
 def pick_center(goal_type: str) -> int:
     return GOAL_CENTER if goal_type in ("cover", "uncover") else TRUE_CENTER
 
@@ -46,13 +47,13 @@ def row_col(index: int, n_cols: int = 18) -> tuple[int,int]:
 
 # salience computation functions
 
-def compute_salience(move_str: str,
-                     center_idx: int,
-                     n_cols: int = 18) -> dict[str,float]:
-    """
-    Compute Stepwise and Euclidean salience from chosen center
-    """
-    idx = int(move_str.strip("()").split(",")[0])
+def compute_salience(move,
+                     center_idx,
+                     n_cols = 18):
+    
+    # Compute Stepwise and Euclidean salience from chosen center
+    
+    idx = move[0]
     r, c = row_col(idx, n_cols)
     rc, cc = row_col(center_idx, n_cols)
     return {
@@ -68,8 +69,8 @@ def add_salience_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     sal = df.apply(
         lambda r: compute_salience(
-            r['first_move'],
-            center_idx=pick_observed_center(r['goal'])
+            ast.literal_eval(r['first_move']),
+            center_idx = pick_observed_center(r['goal'])
         ),
         axis=1
     )
@@ -109,7 +110,7 @@ def random_baseline_salience(config, goal_type=None, n_samples=1000, n_cols=18):
     step_vals, euc_vals = [], []
     for _ in range(n_samples):
         m,d = random.choice(combs)
-        sal = compute_salience(f"({m},{d})", center_idx, n_cols)
+        sal = compute_salience((m, d), center_idx, n_cols)
         step_vals.append(sal["stepwise_salience"])
         euc_vals.append(sal["euclidean_salience"])
     return {"stepwise": float(np.mean(step_vals)), "euclidean": float(np.mean(euc_vals))}
