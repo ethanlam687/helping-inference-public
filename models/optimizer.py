@@ -275,7 +275,7 @@ class optimize:
             goal = row["goal"]
             moveIDs = row["moveIDs"]
 
-            print(f"Evaluating goal: {goal} | alpha: {alpha[0]} | move count: {len(moveIDs)}")
+            print(f"Evaluating goal: {goal} | alpha: {alpha:.3f} | beta: {beta:.3f} | move count: {len(moveIDs)}")
 
             goal_np_initial = general.get_initial_goal_probs(goalspace)
             goal_np = goal_np_initial.copy()
@@ -601,19 +601,30 @@ class optimize:
         for ID in IDs:
             print(f"optimizing architect (salience+pragmatic) for ID {ID}")
             ID_df = moveID_df.loc[moveID_df['ID'] == ID]
-            config = list(ID_df["config"])[0]
+            goal_types = ID_df["goal_type"].unique()
 
-            param_initial = [np.random.rand(), np.random.rand()] 
+            for goal_type in goal_types: 
+                subset_df = ID_df[ID_df["goal_type"] == goal_type]
+                if subset_df.empty:
+                    continue
 
+                print(f"optimizing sal-prag architect for ID {ID} and goal type {goal_type}")
             
-            param_opt = fmin(optimize.compute_ll_sal_prag_architect, param_initial, args=(config, ID_df), ftol = 0.001, full_output=True, disp=False)
-            alpha_opt, beta_opt = param_opt[0]
-            result_df = pd.DataFrame({'ID': [ID], 'alpha': [alpha_opt], 'beta': [beta_opt]})
+                config = list(subset_df["config"])[0]
 
-            architect_optimized = pd.concat([architect_optimized, result_df], ignore_index=True)
+                param_initial = [np.random.rand(), np.random.rand()] 
 
-            # write to csv
-            architect_optimized.to_csv('arch_salprag_opt.csv', index=False)
+                
+                param_opt = fmin(optimize.compute_ll_sal_prag_architect, param_initial, args=(config, subset_df), ftol = 0.001, full_output=True, disp=False)
+                alpha_opt, beta_opt = param_opt[0]
+                result_df = pd.DataFrame({'ID': [ID], 'goal_type': [goal_type],'alpha': [alpha_opt], 'beta': [beta_opt]})
+
+                architect_optimized = pd.concat([architect_optimized, result_df], ignore_index=True)
+
+        # write to csv
+        architect_optimized.to_csv('arch_salprag_opt.csv', index=False)
+
+        return architect_optimized, (alpha_opt, beta_opt)
 
 
     

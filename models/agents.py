@@ -63,19 +63,21 @@ class architect:
     return combined_probs, salience_probs, c
   
   # new function with power formula
-  def v2_sal_prag_architect_probs(configArray, goal_probs_history, goalspace, goal_noise, action_noise, alpha=0.5, beta=0.5, salientA_beta=1.0, salience_metric="euclidean"):
-    # get pramatic probabilities matrix
-    u, pragmatic_probs, c = architect.pragmatic_architect_probs(configArray, goal_probs_history, goal_noise, goalspace, action_noise)
+  def v2_sal_prag_architect_probs(configArray, goal_probs_history, goalspace, goal_noise, action_noise, alpha=0.5, beta=0.5, salience_metric="euclidean"):
+    # get pramatic gp matrix
+    gp, u, s, c = generic_agent.create_goal_matrix(configArray, goal_probs_history, noise_value=goal_noise, goalspace=goalspace)
     # get salience matrix
     salience_matrix, move_labels_sal  = generate_salience_matrix(configArray = configArray, goalspace = goalspace, salience_metric = salience_metric)
     # sanity check
     assert c == move_labels_sal, "move label mismatch between salience and utility matrices"
-    # softmax negative salience matrix to convert distances to probabilities --- lower salience = higher probability
-    salience_probs = softmax(-salientA_beta * salience_matrix, axis=0)
-    # weighted average of salience and pragmatic probabilities
-    combined = (salience_probs ** alpha) * (pragmatic_probs ** beta)
+    # avoid 0
+    eps = 1e-6
+    safe_salience = salience_matrix + eps
+    safe_gp = gp + eps
+    # weighted average of salience and pragmatic matrix
+    combined = (safe_salience ** alpha) * (safe_gp ** beta)
     combined_probs = softmax(combined, axis=0)
-    return combined_probs, salience_probs, c
+    return combined_probs, salience_matrix, gp, c
 
   def sal_prag_architect_trial(configArray, goal, goal_probs_history, goalspace, goal_noise, action_noise, alpha=0.5, salientA_beta=1.0, salience_metric="euclidean"):
     combined_probs, salience_probs, c = architect.sal_prag_architect_probs(configArray, goal_probs_history, goalspace, goal_noise, action_noise, alpha, salientA_beta, salience_metric)
@@ -84,8 +86,8 @@ class architect:
     move_probs = combined_probs[:,goal_index]
     return move_probs, c
   
-  def v2_sal_prag_architect_trial(configArray, goal, goal_probs_history, goalspace, goal_noise, action_noise, alpha=0.5, beta=0.5, salientA_beta=1.0, salience_metric="euclidean"):
-    combined_probs, salience_probs, c = architect.v2_sal_prag_architect_probs(configArray, goal_probs_history, goalspace, goal_noise, action_noise, alpha, beta, salientA_beta, salience_metric)
+  def v2_sal_prag_architect_trial(configArray, goal, goal_probs_history, goalspace, goal_noise, action_noise, alpha=0.5, beta=0.5, salience_metric="euclidean"):
+    combined_probs, salience_matrix, gp, c = architect.v2_sal_prag_architect_probs(configArray, goal_probs_history, goalspace, goal_noise, action_noise, alpha, beta, salience_metric)
     # select probs for specific goal only
     goal_index = goalspace.index(goal)
     move_probs = combined_probs[:,goal_index]
