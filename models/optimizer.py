@@ -452,12 +452,12 @@ class optimize:
             architect_optimized = pd.concat([architect_optimized, beta_df])
 
             # write to csv
-            architect_optimized.to_csv('opt_results/arch_first_prag.csv', index=False)
+            architect_optimized.to_csv('arch_first_prag.csv', index=False)
     
     def optimize_secondmove(moveID_df):
         '''
         '''
-        helper_optimized = pd.read_csv("opt_results/helper_first_std.csv")    
+        helper_optimized = pd.read_csv("helper_first_std.csv")    
         #helper_optimized = pd.DataFrame()    
         IDs = moveID_df.ID.unique().tolist()
         print("IDs=", IDs)
@@ -474,7 +474,7 @@ class optimize:
             helper_optimized = pd.concat([helper_optimized, beta_df])
 
             # write to csv
-            helper_optimized.to_csv('opt_results/helper_first_std.csv', index=False)
+            helper_optimized.to_csv('helper_first_std.csv', index=False)
     
     def optimize_secondmove_prob(moveID_df):
         '''
@@ -496,7 +496,7 @@ class optimize:
             helper_optimized = pd.concat([helper_optimized, beta_df])
 
             # write to csv
-            helper_optimized.to_csv('opt_results/helper_first_prob.csv', index=False)
+            helper_optimized.to_csv('helper_first_prob.csv', index=False)
     
     def optimize_firstmove_literal(moveID_df):
         '''
@@ -517,7 +517,7 @@ class optimize:
             architect_optimized = pd.concat([architect_optimized, beta_df])
 
             # write to csv
-            architect_optimized.to_csv('opt_results/arch_first_lit_useful.csv', index=False)
+            architect_optimized.to_csv('arch_first_lit_useful.csv', index=False)
         
     # updated to optimize at level of ID AND goal type
     def optimize_pragmatic_architect(moveID_df):
@@ -558,7 +558,11 @@ class optimize:
         moveID_df contains 10 rows per participant for the 10  goals they completed
         fmin optimization needs to happen with all goals combined
         '''
-        architect_optimized = pd.read_csv("opt_results/arch_lit_opt.csv")
+        try:
+            architect_optimized = pd.read_csv("arch_lit_opt.csv")
+        except FileNotFoundError:
+            architect_optimized = pd.DataFrame(columns=['ID', 'goal_type', 'action_noise'])
+
         opt_IDs = architect_optimized.ID.unique().tolist()
         #architect_optimized = pd.DataFrame()
         IDs = moveID_df.ID.unique().tolist()
@@ -689,8 +693,8 @@ class optimize:
         simulation_df = pd.DataFrame()
         IDs = moveID_df.ID.unique().tolist()
 
-        architect_betas = pd.read_csv("opt_results/first_arch_optimized.csv")
-        helper_betas = pd.read_csv("opt_results/helper_secondmove_optimized.csv")
+        architect_betas = pd.read_csv("first_arch_optimized.csv")
+        helper_betas = pd.read_csv("helper_secondmove_optimized.csv")
 
         for ID in IDs:
             print("for ID=", ID)
@@ -743,9 +747,132 @@ class optimize:
                 prob_df = pd.DataFrame({'ID': [ID], 'goal': [goal], 'literal_move': [literal_move], 'literal_utility':[literal_utility], 'prag_move': [prag_move], 'prag_utility': [prag_utility], 'baseline_move': [baseline_move], 'baseline_utility': [baseline_utility], 'careful_move':[careful_move], 'careful_utility': careful_utility})                    
             
                 simulation_df = pd.concat([simulation_df, prob_df])
-                simulation_df.to_csv('opt_results/final_simulations.csv', index=False)
-        
-        
+                simulation_df.to_csv('final_simulations.csv', index=False)
+
+    def sal_prag_optimized_simulation(moveID_df):
+        """
+        Simulate each participant's first architect + helper moves using
+        the four parameter files in the working directory.
+        """
+        # Load parameter tables
+        lit_df       = pd.read_csv("arch_lit_opt.csv")
+        help_std_df  = pd.read_csv("helper_first_std.csv")
+        help_prob_df = pd.read_csv("helper_first_prob.csv")
+        sp_df        = pd.read_csv("arch_salprag_opt.csv")
+
+        sims = []
+        for ID in moveID_df.ID.unique():
+            # 1) literal β
+            lit_row       = lit_df[lit_df.ID == ID].iloc[0]
+            literalA_beta = lit_row["action_noise"]
+
+            # 2) helper standard
+            hs_row         = help_std_df[help_std_df.ID == ID].iloc[0]
+            helper_baseline = [
+                hs_row["helper_goal_noise"],
+                hs_row["helper_action_noise"]
+            ]
+
+            # 3) helper probabilistic
+            hp_row         = help_prob_df[help_prob_df.ID == ID].iloc[0]
+            helper_careful = [
+                hp_row["helper_goal_noise"],
+                hp_row["helper_pass_noise"],
+                hp_row["helper_action_noise"]
+            ]
+
+            # 4) loop over each specific goal (row) for this ID
+            for _, row in moveID_df[moveID_df.ID == ID].iterrows():
+                goal      = row.goal
+                goal_type = row.goal_type
+                config    = row.config
+
+                # sal-prag α,β for this goal_type
+                sp_row     = sp_df[
+                    (sp_df.ID == ID) &
+                    (sp_df.goal_type == goal_type)
+                ].iloc[0]
+                alpha_opt, beta_opt = sp_row["alpha"], sp_row["beta"]
+
+                # A) Literal architect’s first move
+                lit_probs, lit_labels = architect.literal_architect_trial(
+                    configArray=config,
+                    goal=goal,
+                    literalA_beta=literalA_beta,
+                    goalspace=general.define_goalspace()
+                )
+                lit_move = general.get_random_move(lit_labels, lit_probs)
+                lit_util = general.compute_move_utility(config, lit_move, goal)
+
+                # B) Pragmatic architect’s first move
+                prag_probs, prag_labels = architect.pragmatic_architect_trial(
+                    configArray=config,
+                    goal=goal,
+                    goal_probs_history=general.get_initial_goal_probs(general.define_goalspace()),
+                    goalspace=general.define_goalspace(),
+                    goal_noise=helper_baseline[0],
+                    action_noise=helper_baseline[1]
+                )
+                prag_move = general.get_random_move(prag_labels, prag_probs)
+                prag_util = general.compute_move_utility(config, prag_move, goal)
+
+                # C) Sal‐prag architect’s first move
+                sp_probs, sp_labels = architect.v2_sal_prag_architect_trial(
+                    configArray=config,
+                    goal=goal,
+                    goal_probs_history=general.get_initial_goal_probs(general.define_goalspace()),
+                    goalspace=general.define_goalspace(),
+                    goal_noise=1.0,
+                    action_noise=1.0,
+                    alpha=alpha_opt,
+                    beta=beta_opt,
+                    salience_metric="euclidean"
+                )
+                sp_move = general.get_random_move(sp_labels, sp_probs)
+                sp_util = general.compute_move_utility(config, sp_move, goal)
+
+                # D) Helper standard’s first move
+                std_probs, std_labels, _ = helper.standard_helper(
+                    config, sp_move,
+                    general.get_initial_goal_probs(general.define_goalspace()),
+                    general.define_goalspace(),
+                    goal_noise=helper_baseline[0],
+                    action_noise=helper_baseline[1]
+                )
+                std_move = general.get_random_move(std_labels, std_probs)
+                std_util = 0 if std_move==("none","none") else general.compute_move_utility(config, std_move, goal)
+
+                # E) Helper probabilistic’s first move
+                prob_probs, prob_labels, _ = helper.probabilistic_helper(
+                    config, sp_move,
+                    general.get_initial_goal_probs(general.define_goalspace()),
+                    general.define_goalspace(),
+                    goal_noise=helper_careful[0],
+                    pass_noise=helper_careful[1],
+                    action_noise=helper_careful[2]
+                )
+                prob_move = general.get_random_move(prob_labels, prob_probs)
+                prob_util = 0 if prob_move==("none","none") else general.compute_move_utility(config, prob_move, goal)
+
+                sims.append({
+                    "ID":              ID,
+                    "goal_type":       goal_type,
+                    "goal":            goal,
+                    "literal_move":    lit_move,
+                    "literal_util":    lit_util,
+                    "prag_move":       prag_move,
+                    "prag_util":       prag_util,
+                    "salprag_move":    sp_move,
+                    "salprag_util":    sp_util,
+                    "helper_std_move": std_move,
+                    "helper_std_util": std_util,
+                    "helper_prob_move": prob_move,
+                    "helper_prob_util": prob_util
+                })
+
+        sim_df = pd.DataFrame(sims)
+        sim_df.to_csv("final_simulations.csv", index=False)
+        return sim_df
 
 
 #moveID_df = pd.read_csv("e1 results/final_move_df.csv", converters={"moveIDs": literal_eval, "config": literal_eval})

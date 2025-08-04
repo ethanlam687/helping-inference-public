@@ -249,6 +249,7 @@ e2_prag <- combined_first_moves %>%
 
 paired_prag <- e2_prag %>%
   inner_join(e1_prag, by = c("importId" = "ID", "goal", "goal_type"))
+view(paired_prag)
 
 ```
 ## E1-E2 Unpaired t-test for Pragmatism
@@ -608,7 +609,7 @@ corrections_per_game_by_type <- corrections %>%
 
 print(corrections_per_game_by_type)
 
-correction_prop <- corrections %>%
+correction_prop <- corrections %>% 
   count(goal_type, helper_move_utility = move_utility) %>%
   group_by(goal_type) %>%
   mutate(total_corrections = sum(n), proportion = n / total_corrections) %>%
