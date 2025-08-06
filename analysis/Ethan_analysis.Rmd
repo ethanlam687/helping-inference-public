@@ -33,6 +33,7 @@ e2 <- read_csv("../data/e2/final_tracker.csv")%>%
 e1_first_moves <- read_csv("../data/e1/final_first_moves.csv")
 e2_first_moves <- read_csv("../data/e2/first_moves.csv")
 combined_saliences <- read_csv("../analysis/salience_first_moves.csv")
+e1_model_results <- read_csv("../data/e1/all_model_results.csv") 
 
 
 ```
@@ -647,7 +648,57 @@ ggplot(corrections_per_game_by_type,
 
 ```
 
+# Compiled Optimizer Results
 
+```{r}
+
+
+# lowest NLL per goal_type and ID
+lowest_model_per_group <- e1_model_results %>%
+  group_by(ID, goal_type) %>%
+  slice_min(order_by = NLL, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+# count how many times each model was best, grouped by goal type
+model_wins_by_goal <- lowest_model_per_group %>%
+  count(goal_type, model, sort = TRUE)
+
+
+ggplot(model_wins_by_goal, aes(x = model, y = n, fill = model)) +
+  geom_col() +
+  facet_wrap(~ goal_type) +
+  labs(
+    title = "Model Wins (Lowest NLL per ID) by Goal Type",
+    x = "Model",
+    y = "# of Wins"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# mean NLL by model and goal type
+summary_nll <- e1_model_results %>%
+  group_by(goal_type, model) %>%
+  summarise(
+    mean_nll = mean(NLL, na.rm = TRUE),
+    se_nll = sd(NLL, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+ggplot(summary_nll, aes(x = model, y = mean_nll, fill = model)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge(0.8), width = 0.7) + 
+  geom_errorbar(aes(ymin = mean_nll - se_nll, ymax = mean_nll + se_nll),
+                position = position_dodge(0.8), width = 0.2) +
+  facet_wrap(~ goal_type) +
+  labs(
+    title = "Mean NLL by Model and Goal Type",
+    x = "Model",
+    y = "Mean Negative Log-Likelihood (NLL)"
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal()
+
+
+```
 
 
 
