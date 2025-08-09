@@ -653,6 +653,19 @@ ggplot(corrections_per_game_by_type,
 ```{r}
 
 
+sum_NLL <- e1_model_results %>%
+  group_by(goal_type, model) %>%
+  summarise(total_NLL = sum(NLL), .groups = "drop")
+print(sum_NLL)
+ggplot(sum_NLL, aes(x = model, y = total_NLL, fill = model)) + geom_col() + 
+  facet_wrap(~ goal_type) + 
+  labs(title = "Summed NLL per Model by Goal Type",
+       x = "Model",
+       y = "Total NLL") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
 # lowest NLL per goal_type and ID
 lowest_model_per_group <- e1_model_results %>%
   group_by(ID, goal_type) %>%
