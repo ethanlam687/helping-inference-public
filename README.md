@@ -1,54 +1,77 @@
 # Understanding Goal-Directed Helping Behavior
 
-### How do people decide the *best way* to help?
+### How do people decide the best way to help?
 
-This project explores the decision-making strategies people use when helping others in different contexts. Over the past eight months, we’ve analyzed two experiments (E1 and E2) where participants played a grid-based task game that introduced problem-solving, collaborative scenarios. 
+This project examines the reasoning strategies people use when deciding how to help others. Over the past eight months, we analyzed two experiments (E1 and E2) in which participants played a grid-based game and would take turns making moves to advance toward a goal (E1) or play the game alone, individually making moves to complete the goal (E2). This setting introduced collaborative, goal-directed problem-solving scenarios.
 
-We then used computational modeling to understand **what kind of reasoning people relied on** — whether they acted based on:
-- **Literal interpretation** of instructions  
-- **Pragmatic reasoning**, where they considered the broader communicative context  
-- **Salience**, where they were drawn to the most noticeable or prominent cues  
+Our process involved two stages:
+
+- **Preliminary behavioral analysis** — Using R, we quantified measures of salience, utility, and pragmatism to capture different aspects of participants’ move choices. We compared these measures between experiments to identify behavioral patterns and differences.
+
+- **Computational modeling** — Using Python, we fit participants’ choices to competing models to understand which decision strategies best explained their behavior.
 
 ---
 
-## Project Summary
+## Project Focus
 
-When someone needs help, our minds can process the request in different ways.  
-For example:
-- If a friend says “pass me the blue cup,” you might literally hand them the nearest blue cup (**literal**).
-- But if you notice that they’re making tea and their kettle is right next to a different blue cup, you might think they mean something else (**pragmatic**).
-- Or you might simply grab whatever object stands out the most in the scene (**salience**).
+Helping behavior involves multiple cognitive strategies that influence how people choose their actions. Our project focused on understanding three key interpretations of how people undergo decision-making in goal-directed helping tasks:
 
-We wanted to measure *how much each of these strategies explains human behavior*, and whether it changes across different experiments.
+- **Literal interpretation** — responding directly to the stated goal or instruction without additional inference.
+
+- **Pragmatic reasoning** — integrating contextual and communicative cues to infer the helper’s intended goal more strategically.
+
+- **Salience** — the influence of visual or spatial prominence that makes some moves easier or more attention-grabbing.
+
+Rather than assuming people rely on a single strategy, we aimed to quantify how these factors jointly contribute to move choices, and whether their relative importance changes across different experimental settings.
 
 ---
 
 ## The Experiments
 
-We analyzed **two experiments**:
-- **Experiment 1 (E1)** — Collaborative two-player game setup--single player plus the presence of a helper  
-- **Experiment 2 (E2)** — Single player game setup--absence of the helper
+We analyzed two versions of the grid-based helping game:
 
-Participants’ choices were fit to three models:
-1. **Literal model**
-2. **Pragmatic model**
-3. **Salience + Pragmatic model (sal_prag)**
+- **Experiment 1 (E1)** — Collaborative two-player setup, where a helper was present.
 
-We then compared the **negative log likelihood (NLL)** of each model fit
+- **Experiment 2 (E2)** — Single-player setup, where the helper was absent.
+
+---
+
+## Stage 1 — Behavioral Measures
+
+Before modeling, we examined several measures:
+
+- **Salience** — how visually prominent or accessible a move was.
+
+- **Utility** — whether a move advanced, hindered, or had no effect on the goal.
+
+- **Pragmatism** — how clearly a move signaled the intended goal to a partner.
+
+We compared these measures across E1 and E2. Notably, E1 tended to have lower salience values (moves less visually accessible), suggesting players sometimes made less obvious moves to communicate intentions, whereas E2 moves were often more salient, suggesting efficiency took priority with the absence of a second player. 
+
+---
+
+## Stage 2 — Modeling
+
+We fit each participant’s move choices to three models:
+
+1. Literal  
+2. Pragmatic  
+3. Salience + Pragmatic (sal_prag)
+
+Model fits were evaluated using negative log likelihood (NLL), summed across IDs for each specific goal type.
 
 ---
 
 ## Results
 
-Across both experiments:
-- E2 participants consistently had **lower NLL values** than E1 for all models.
-- This suggests that **E2 participants might be relying more on salience** when making decisions (in the absence of the helper, the single players may make more visually accessible and efficient moves at the sacrifice of greater strategic signalling).
-- The salience-pragmatic model often outperformed the others, showing that people don’t rely on *just* one strategy, rather incorporating both visual efficiency cues and pragmatically strategic thinking.
+In both experiments, the sal_prag model provided the best overall fit, outperforming the literal and pragmatic models for 3 of the 5 goal types.
+
+This pattern suggests that people’s moves were guided by both visual efficiency (salience) and strategic communicative reasoning (pragmatics), rather than relying on either factor alone.
+
 ---
 
 ## Tools Used
 
-- **R** (data analysis, visualization)
-- **Python** (modeling)  
-- **HPC (High-Performance Computing)** for processing large datasets
-
+- **R** — preliminary behavioral analyses, visualization  
+- **Python** — computational modeling and simulation  
+- **HPC (High-Performance Computing)** — for running large-scale model fits efficiently
