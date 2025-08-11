@@ -64,7 +64,9 @@ Model fits were evaluated using negative log likelihood (NLL), summed across IDs
 
 ## Results
 
-In both experiments, the sal_prag model provided the best overall fit, outperforming the literal and pragmatic models for 3 of the 5 goal types.
+We first compared the behavioral measures (pragmatism, utility, and salience) across E1 and E2. Notably, E1 tended to have lower salience values (moves less visually accessible), suggesting players sometimes made less obvious moves to communicate intentions, whereas E2 moves were often more salient, suggesting efficiency took priority with the absence of a second player. In addition, participants in E1 made more useful and fewer inconsequential first moves than in E2, suggesting greater strategic and communicative intent in collaboration. In contrast, solo players favored easier, more visually salient moves regardless of utility.
+
+Model fitting analysis indicated that in both experiments, the sal_prag model provided the best overall fit, outperforming the literal and pragmatic models for 3 of the 5 goal types.
 
 This pattern suggests that people’s moves were guided by both visual efficiency (salience) and strategic communicative reasoning (pragmatics), rather than relying on either factor alone.
 
